@@ -129,22 +129,30 @@ export function withdrawalFactor(b: Behavior): number {
 /* ------------------------ ساخت ویژه‌های ورودی ------------------------ */
 
 export function buildVintages(total: number, schedule: DepositSchedule, horizon: number): Vintage[] {
-  if (!(total > 0)) return [];
+  if (!(total > 0) || !Number.isFinite(total)) return [];
+  const lastMonth = Math.max(0, Math.round(clamp(horizon, 0, 600)));
   if (schedule.mode === 'lump') return [{ month: 0, amount: total }];
   if (schedule.mode === 'uniform') {
-    const n = Math.round(clamp(schedule.uniformMonths, 1, horizon + 1));
+    const n = Math.round(clamp(schedule.uniformMonths, 1, lastMonth + 1));
     return Array.from({ length: n }, (_, i) => ({ month: i, amount: total / n }));
   }
-  const positive = schedule.custom.filter((v) => v.share > 0);
-  const sum = positive.reduce((s, v) => s + v.share, 0);
-  if (sum <= 0) return [];
-  const map = new Map<number, number>();
-  for (const v of positive) {
-    const m = Math.round(v.month);
-    if (m < 0 || m > horizon) continue; // خارج از افق
-    map.set(m, (map.get(m) ?? 0) + (total * v.share) / sum);
+
+  // Keep only valid in-horizon entries before normalization so dropped/invalid
+  // entries cannot silently reduce the modeled deposit total.
+  const valid = (Array.isArray(schedule.custom) ? schedule.custom : []).filter(
+    (v) => Number.isFinite(v.month) && Number.isFinite(v.share) && v.share > 0,
+  );
+  const byMonth = new Map<number, number>();
+  for (const v of valid) {
+    const month = Math.round(v.month);
+    if (month < 0 || month > lastMonth) continue;
+    byMonth.set(month, (byMonth.get(month) ?? 0) + v.share);
   }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([month, amount]) => ({ month, amount }));
+  const sum = [...byMonth.values()].reduce((s, share) => s + share, 0);
+  if (!(sum > 0)) return [];
+  return [...byMonth.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([month, share]) => ({ month, amount: (total * share) / sum }));
 }
 
 /* ----------------------- موتور ماتریس نقدینگی ----------------------- */
@@ -267,6 +275,7 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   const tierResults: TierResult[] = tiers.map((tier, idx) => {
     const share = allocSum > 0 ? Math.max(0, tier.allocation || 0) / allocSum : 0;
     const { alpha, binding, repBalance } = effectiveAlpha(tier, config.loanCap, behavior.avgTicket);
+    const eligible = Number.isFinite(behavior.avgTicket) && behavior.avgTicket >= Math.max(0, tier.minBalance);
     const rate = tierRate(tier, config);
     const T = Math.max(1, Math.round(tier.tLoan));
     const tDep = Math.max(0, Math.round(tier.tDep));
@@ -298,7 +307,7 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
       const D = v.amount * share;
       if (!(D > 0)) continue;
 
-      const L = D * alpha * take * app; // تعهد اعطای وام
+      const L = eligible ? D * alpha * take * app : 0; // فقط سپرده‌گذار واجد حداقل مانده امکان دریافت وام دارد
       const W = D * wFactor; // خروج اصل سپرده
       const pay = unitPay * L;
 
@@ -347,7 +356,9 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
           rp.pmtInflow += cash;
           rp.principalIn += u.principal * L * collectRatio;
           rp.incomeIn += u.income * L * collectRatio;
-          bookDelta[tp] -= u.principal * L;
+          // Reduce the loan book only by principal actually collected; uncollected
+          // principal remains outstanding under the model's default assumption.
+          bookDelta[tp] -= u.principal * L * collectRatio;
           push(tp, 'pmt', tier, idx, cash, t0, { j, total: T });
         } else {
           pmtBeyond += cash;
@@ -609,12 +620,19 @@ export function applySensitivity(input: SimInput, key: SensVar, value: number): 
       return { ...input, config: { ...input.config, reserveRatio: value } };
     case 'alphaScale':
       return { ...input, tiers: input.tiers.map((t) => ({ ...t, alpha: (t.alpha * value) / 100 })) };
-    case 'rate':
+    case 'rate': {
+      const delta = value - globalRate(input.config);
       return {
         ...input,
         config: { ...input.config, qardFeeRate: value, murabahaRate: value },
-        tiers: input.tiers.map((t) => ({ ...t, rateOverride: null })),
+        // Apply the same parallel rate shock to tier-specific prices. At the
+        // current global rate (delta = 0), the original scenario is preserved.
+        tiers: input.tiers.map((t) => ({
+          ...t,
+          rateOverride: t.rateOverride === null ? null : Math.max(0, t.rateOverride + delta),
+        })),
       };
+    }
     default:
       return input;
   }

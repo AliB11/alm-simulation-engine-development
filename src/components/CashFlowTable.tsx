@@ -283,7 +283,18 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
                     )}
                   >
                     <td className={cn(td, 'text-slate-400')}>
-                      <ChevronDown className={cn('h-4 w-4 transition', open && 'rotate-180 text-indigo-500')} />
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        aria-label={`${open ? 'بستن' : 'بازکردن'} جزئیات ماه ${toFa(r.t)}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggle(r.t);
+                        }}
+                        className="rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                      >
+                        <ChevronDown className={cn('h-4 w-4 transition', open && 'rotate-180 text-indigo-500')} />
+                      </button>
                     </td>
                     <td className={cn(td, 'font-bold text-slate-700 dark:text-slate-200')}>{toFa(r.t)}</td>
                     <td className={td}>{r.depositGross > EPS ? fmt(r.depositGross) : <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
