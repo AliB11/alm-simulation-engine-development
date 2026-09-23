@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Vazirmatn", "Vazir", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Range slider (RTL aware — fill grows from the right) ---------- */
+.alm-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to left,
+    var(--range-fill, #6366f1) var(--pct, 0%),
+    var(--range-track, #e2e8f0) var(--pct, 0%)
+  );
+  outline: none;
+  cursor: pointer;
+}
+.dark .alm-range {
+  --range-track: #334155;
+}
+.alm-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid var(--range-fill, #6366f1);
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.25);
+  transition: transform 0.15s ease;
+}
+.alm-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.alm-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid var(--range-fill, #6366f1);
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.25);
+}
+.alm-range:focus-visible {
+  box-shadow: 0 0 0 4px rgb(99 102 241 / 0.2);
+}
+
+/* ---------- Scrollbars ---------- */
+.alm-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.alm-scroll::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.45);
+  border-radius: 9999px;
+}
+.alm-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139 / 0.6);
+}
+.alm-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- Recharts ---------- */
+.recharts-wrapper text {
+  font-family: var(--font-sans);
+}
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+.recharts-brush-texts text {
+  font-size: 10px;
+}
+
+/* ---------- Select (native) ---------- */
+select {
+  background-image: none;
+}
