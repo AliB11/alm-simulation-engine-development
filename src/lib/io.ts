@@ -1,4 +1,5 @@
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, MonthRow, Tier } from '../types';
+import { DEFAULT_BEHAVIOR, DEFAULT_CONFIG, DEFAULT_SCHEDULE, PRESETS } from './presets';
 
 const STATE_KEY = 'alm-sim-state-v2';
 export const THEME_KEY = 'alm-theme';
@@ -16,34 +17,108 @@ function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+function finiteNumber(value: unknown, fallback: number, min: number, max: number, integer = false): number {
+  const n = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  const safe = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  return integer ? Math.round(safe) : safe;
+}
+
+function sanitizeConfig(v: unknown): GlobalConfig | undefined {
+  if (!isObj(v)) return undefined;
+  return {
+    contractType: v.contractType === 'murabaha' ? 'murabaha' : 'qard',
+    qardFeeRate: finiteNumber(v.qardFeeRate, DEFAULT_CONFIG.qardFeeRate, 0, 60),
+    murabahaRate: finiteNumber(v.murabahaRate, DEFAULT_CONFIG.murabahaRate, 0, 60),
+    reserveRatio: finiteNumber(v.reserveRatio, DEFAULT_CONFIG.reserveRatio, 0, 100),
+    loanCap: finiteNumber(v.loanCap, DEFAULT_CONFIG.loanCap, 0, 1e16),
+    horizon: finiteNumber(v.horizon, DEFAULT_CONFIG.horizon, 12, 120, true),
+    initialLiquidity: finiteNumber(v.initialLiquidity, DEFAULT_CONFIG.initialLiquidity, -1e16, 1e16),
+    releaseReserve: typeof v.releaseReserve === 'boolean' ? v.releaseReserve : DEFAULT_CONFIG.releaseReserve,
+    defaultRate: finiteNumber(v.defaultRate, DEFAULT_CONFIG.defaultRate, 0, 100),
+    interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, 100),
+    opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, 100),
+  };
+}
+
+function sanitizeBehavior(v: unknown): Behavior | undefined {
+  if (!isObj(v)) return undefined;
+  return {
+    totalDeposit: finiteNumber(v.totalDeposit, DEFAULT_BEHAVIOR.totalDeposit, 0, 1e16),
+    avgTicket: finiteNumber(v.avgTicket, DEFAULT_BEHAVIOR.avgTicket, 0, 1e16),
+    takeUpRate: finiteNumber(v.takeUpRate, DEFAULT_BEHAVIOR.takeUpRate, 0, 100),
+    approvalRate: finiteNumber(v.approvalRate, DEFAULT_BEHAVIOR.approvalRate, 0, 100),
+    runoffRate: finiteNumber(v.runoffRate, DEFAULT_BEHAVIOR.runoffRate, 0, 100),
+    churnRate: finiteNumber(v.churnRate, DEFAULT_BEHAVIOR.churnRate, 0, 100),
+  };
+}
+
 function sanitizeTiers(v: unknown): Tier[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out: Tier[] = [];
-  v.forEach((t, i) => {
-    if (!isObj(t)) return;
+  const ids = new Set<string>();
+  v.slice(0, 500).forEach((item, i) => {
+    if (!isObj(item)) return;
+    let id = typeof item.id === 'string' && item.id.trim() ? item.id.slice(0, 100) : `import-tier-${i}`;
+    while (ids.has(id)) id = `import-tier-${i}-${ids.size}`;
+    ids.add(id);
     out.push({
-      id: typeof t.id === 'string' ? t.id : `t${i}-${Date.now()}`,
-      name: typeof t.name === 'string' ? t.name : `پله ${i + 1}`,
-      tDep: Number(t.tDep) || 1,
-      tLoan: Number(t.tLoan) || 12,
-      alpha: Number(t.alpha) || 100,
-      minBalance: Number(t.minBalance) || 0,
-      allocation: Number(t.allocation) || 0,
-      rateOverride: t.rateOverride === null || t.rateOverride === undefined ? null : Number(t.rateOverride),
+      id,
+      name: typeof item.name === 'string' ? item.name.slice(0, 120) : `پله ${i + 1}`,
+      tDep: finiteNumber(item.tDep, 1, 1, 12, true),
+      tLoan: finiteNumber(item.tLoan, 12, 6, 60, true),
+      alpha: finiteNumber(item.alpha, 100, 0, 500),
+      minBalance: finiteNumber(item.minBalance, 0, 0, 1e16),
+      allocation: finiteNumber(item.allocation, 0, 0, 100),
+      rateOverride:
+        item.rateOverride === null || item.rateOverride === undefined
+          ? null
+          : finiteNumber(item.rateOverride, 0, 0, 60),
     });
   });
   return out;
 }
 
+function sanitizeSchedule(v: unknown, horizon: number): DepositSchedule | undefined {
+  if (!isObj(v)) return undefined;
+  const mode = v.mode === 'uniform' || v.mode === 'custom' ? v.mode : 'lump';
+  const custom: DepositSchedule['custom'] = [];
+  const ids = new Set<string>();
+  if (Array.isArray(v.custom)) {
+    v.custom.slice(0, 1000).forEach((item, i) => {
+      if (!isObj(item)) return;
+      let id = typeof item.id === 'string' && item.id.trim() ? item.id.slice(0, 100) : `import-vintage-${i}`;
+      while (ids.has(id)) id = `import-vintage-${i}-${ids.size}`;
+      ids.add(id);
+      custom.push({
+        id,
+        month: finiteNumber(item.month, 0, 0, horizon, true),
+        share: finiteNumber(item.share, 0, 0, 100),
+      });
+    });
+  }
+  return {
+    mode,
+    uniformMonths: finiteNumber(v.uniformMonths, DEFAULT_SCHEDULE.uniformMonths, 1, horizon + 1, true),
+    custom,
+  };
+}
+
 export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
   if (!isObj(raw)) return null;
   const out: Partial<PersistedState> = {};
-  if (isObj(raw.config)) out.config = raw.config as unknown as GlobalConfig;
-  if (isObj(raw.behavior)) out.behavior = raw.behavior as unknown as Behavior;
-  if (isObj(raw.schedule)) out.schedule = raw.schedule as unknown as DepositSchedule;
+  const config = sanitizeConfig(raw.config);
+  if (config) out.config = config;
+  const behavior = sanitizeBehavior(raw.behavior);
+  if (behavior) out.behavior = behavior;
+  const schedule = sanitizeSchedule(raw.schedule, config?.horizon ?? DEFAULT_CONFIG.horizon);
+  if (schedule) out.schedule = schedule;
   const tiers = sanitizeTiers(raw.tiers);
   if (tiers) out.tiers = tiers;
-  if (typeof raw.activePreset === 'string' || raw.activePreset === null) out.activePreset = raw.activePreset as string | null;
+  if (typeof raw.activePreset === 'string' && PRESETS.some((p) => p.key === raw.activePreset)) {
+    out.activePreset = raw.activePreset;
+  } else if (raw.activePreset === null) {
+    out.activePreset = null;
+  }
   if (raw.currency === 'toman' || raw.currency === 'rial') out.currency = raw.currency;
   return out;
 }
