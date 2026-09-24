@@ -37,6 +37,7 @@ function sanitizeConfig(v: unknown): GlobalConfig | undefined {
     defaultRate: finiteNumber(v.defaultRate, DEFAULT_CONFIG.defaultRate, 0, 100),
     interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, 100),
     opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, 100),
+    depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, 100),
   };
 }
 
@@ -176,11 +177,14 @@ export function exportCashFlowCsv(rows: MonthRow[], factor: number, unit: string
     `جمع ورودی (${unit})`,
     `تعهد اعطای وام (${unit})`,
     `خروج سپرده (${unit})`,
+    `سود پرداختی سپرده (${unit})`,
     `جمع خروجی (${unit})`,
     `خالص جریان نقد NCF (${unit})`,
     `نقدینگی تجمعی CumLiq (${unit})`,
     `مانده سپرده (${unit})`,
     `مانده تسهیلات (${unit})`,
+    `هزینه تامین کسری ماهانه (${unit})`,
+    `حاشیه تجمعی بانک (${unit})`,
   ];
   const r = (v: number) => Math.round(v * factor);
   const lines = [header.join(',')];
@@ -198,11 +202,14 @@ export function exportCashFlowCsv(rows: MonthRow[], factor: number, unit: string
         r(row.inflow),
         r(row.loanOut),
         r(row.withdrawalOut),
+        r(row.profitPaid),
         r(row.outflow),
         r(row.ncf),
         r(row.cum),
         r(row.depositBalance),
         r(row.loanBook),
+        r(row.fundingCost),
+        r(row.cumMargin),
       ].join(','),
     );
   }

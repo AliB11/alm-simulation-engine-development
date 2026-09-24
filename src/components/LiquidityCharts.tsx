@@ -32,6 +32,7 @@ interface Datum {
   release: number;
   loanNeg: number;
   wdNeg: number;
+  profitNeg: number;
   depBal: number;
   loanBook: number;
 }
@@ -86,6 +87,7 @@ function FlowTooltip({ active, payload }: TipProps) {
       {d.release > 0 && <TipRow label="آزادسازی سپرده قانونی" value={d.release} color="#14b8a6" />}
       <TipRow label="تعهد اعطای وام" value={-d.loanNeg} color="#f43f5e" />
       <TipRow label="خروج سپرده" value={-d.wdNeg} color="#f59e0b" />
+      {d.profitNeg !== 0 && <TipRow label="سود پرداختی سپرده" value={-d.profitNeg} color="#a855f7" />}
       <div className="mt-1 border-t border-slate-100 pt-1 dark:border-slate-800">
         <TipRow label="خالص جریان نقد (NCF)" value={d.ncf} strong />
       </div>
@@ -141,6 +143,7 @@ export function LiquidityCharts({ result, horizon }: { result: SimResult; horizo
         release: r.reserveRelease * factor,
         loanNeg: -r.loanOut * factor,
         wdNeg: -r.withdrawalOut * factor,
+        profitNeg: -r.profitPaid * factor,
         depBal: r.depositBalance * factor,
         loanBook: r.loanBook * factor,
       })),
@@ -290,6 +293,7 @@ export function LiquidityCharts({ result, horizon }: { result: SimResult; horizo
                     { label: 'آزادسازی RR', color: '#14b8a6' },
                     { label: 'تعهد وام', color: '#f43f5e' },
                     { label: 'خروج سپرده', color: '#f59e0b' },
+                    { label: 'سود سپرده', color: '#a855f7' },
                     { label: 'NCF', color: dark ? '#e2e8f0' : '#0f172a', line: true },
                   ]
             }
@@ -338,6 +342,9 @@ export function LiquidityCharts({ result, horizon }: { result: SimResult; horizo
               )}
               {mode === 'components' && (
                 <Bar dataKey="wdNeg" stackId="s" fill="#f59e0b" maxBarSize={22} isAnimationActive={false} />
+              )}
+              {mode === 'components' && (
+                <Bar dataKey="profitNeg" stackId="s" fill="#a855f7" maxBarSize={22} isAnimationActive={false} />
               )}
               <Line
                 type="monotone"

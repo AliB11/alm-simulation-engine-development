@@ -18,6 +18,7 @@ const EVENT_META: Record<EventType, { label: string; sign: 1 | -1; color: string
   pmt: { label: 'وصول اقساط', sign: 1, color: '#6366f1' },
   loan: { label: 'پرداخت تسهیلات (تعهد وام)', sign: -1, color: '#f43f5e' },
   withdrawal: { label: 'برداشت اصل سپرده', sign: -1, color: '#f59e0b' },
+  profit: { label: 'سود پرداختی به سپرده‌گذاران', sign: -1, color: '#a855f7' },
 };
 
 function eventDetail(e: FlowEvent): string {
@@ -45,7 +46,7 @@ function EventsDetail({
   rr: number;
 }) {
   const inflows = row.events.filter((e) => EVENT_META[e.type].sign > 0 || e.type === 'reserve');
-  const outflows = row.events.filter((e) => e.type === 'loan' || e.type === 'withdrawal');
+  const outflows = row.events.filter((e) => e.type === 'loan' || e.type === 'withdrawal' || e.type === 'profit');
   const List = ({ items, empty }: { items: FlowEvent[]; empty: string }) => (
     <div className="space-y-1.5">
       {items.length === 0 && <div className="text-[11.5px] text-slate-400">{empty}</div>}
@@ -158,10 +159,11 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
       inflow: a.inflow + r.inflow,
       loan: a.loan + r.loanOut,
       wd: a.wd + r.withdrawalOut,
+      profit: a.profit + r.profitPaid,
       outflow: a.outflow + r.outflow,
       ncf: a.ncf + r.ncf,
     }),
-    { dep: 0, rr: 0, pmt: 0, rel: 0, inflow: 0, loan: 0, wd: 0, outflow: 0, ncf: 0 },
+    { dep: 0, rr: 0, pmt: 0, rel: 0, inflow: 0, loan: 0, wd: 0, profit: 0, outflow: 0, ncf: 0 },
   );
 
   const toggle = (t: number) =>
@@ -173,7 +175,8 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
     });
 
   const showRelease = config.releaseReserve;
-  const colCount = showRelease ? 13 : 12;
+  const showProfit = config.depositProfitRate > 0;
+  const colCount = 12 + (showRelease ? 1 : 0) + (showProfit ? 1 : 0);
   const th =
     'sticky top-0 z-10 bg-slate-50 px-3 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap dark:bg-slate-900 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800';
   const td = 'px-3 py-2 whitespace-nowrap tabular-nums border-b border-slate-100 dark:border-slate-800/80';
@@ -252,6 +255,7 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
               <th className={cn(th, 'text-emerald-700 dark:text-emerald-400')}>جمع ورودی</th>
               <th className={th}>تعهد وام</th>
               <th className={th}>خروج سپرده</th>
+              {showProfit && <th className={th}>سود سپرده</th>}
               <th className={cn(th, 'text-rose-700 dark:text-rose-400')}>جمع خروجی</th>
               <th className={th}>خالص جریان (NCF)</th>
               <th className={th}>نقدینگی تجمعی</th>
@@ -306,6 +310,11 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
                     <td className={cn(td, 'font-semibold text-emerald-700 dark:text-emerald-400')}>{fmt(r.inflow)}</td>
                     <td className={td}>{r.loanOut > EPS ? fmt(-r.loanOut) : <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
                     <td className={td}>{r.withdrawalOut > EPS ? fmt(-r.withdrawalOut) : <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
+                    {showProfit && (
+                      <td className={cn(td, 'text-violet-600 dark:text-violet-400')}>
+                        {r.profitPaid > EPS ? fmt(-r.profitPaid) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                      </td>
+                    )}
                     <td className={cn(td, 'font-semibold text-rose-700 dark:text-rose-400')}>{r.outflow > EPS ? fmt(-r.outflow) : fmt(0)}</td>
                     <td className={cn(td, 'font-bold', r.ncf < -EPS ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
                       {fmt(r.ncf)}
@@ -345,6 +354,11 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
                 <td className="sticky bottom-0 bg-slate-100 px-3 py-2.5 tabular-nums text-emerald-700 dark:bg-slate-900 dark:text-emerald-400">{fmt(totals.inflow)}</td>
                 <td className="sticky bottom-0 bg-slate-100 px-3 py-2.5 tabular-nums dark:bg-slate-900">{fmt(-totals.loan)}</td>
                 <td className="sticky bottom-0 bg-slate-100 px-3 py-2.5 tabular-nums dark:bg-slate-900">{fmt(-totals.wd)}</td>
+                {showProfit && (
+                  <td className="sticky bottom-0 bg-slate-100 px-3 py-2.5 tabular-nums text-violet-600 dark:bg-slate-900 dark:text-violet-400">
+                    {fmt(-totals.profit)}
+                  </td>
+                )}
                 <td className="sticky bottom-0 bg-slate-100 px-3 py-2.5 tabular-nums text-rose-700 dark:bg-slate-900 dark:text-rose-400">{fmt(-totals.outflow)}</td>
                 <td className={cn('sticky bottom-0 bg-slate-100 px-3 py-2.5 tabular-nums dark:bg-slate-900', totals.ncf < 0 ? 'text-rose-600' : 'text-emerald-600')}>
                   {fmt(totals.ncf)}

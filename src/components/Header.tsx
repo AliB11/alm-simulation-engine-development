@@ -154,6 +154,14 @@ export function Header({
                 {fmtRatio(kpis.leverage)}×
               </span>
             </span>
+            <span className="hidden items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 xl:flex">
+              حاشیهٔ خالص:
+              <Money
+                compact
+                value={kpis.netMargin}
+                className={kpis.netMargin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
+              />
+            </span>
           </div>
         </div>
       </div>

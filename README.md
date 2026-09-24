@@ -21,8 +21,12 @@
 - **Cohort / Vintage cash-flow matrix** — configurable horizon (12–120 months) with lump / uniform / custom deposit scheduling.
 - **Double Liquidity Drain** — simultaneous loan commitment + deposit runoff at maturity (per CBI no-blocking rule).
 - **Live risk KPIs** — tipping point, maximum liquidity hole, leverage ratio, interbank funding cost, recovery month.
+- **Simulated P&L** — fee/profit income collected, deposit profit paid on closing balances, interbank funding cost and the
+  resulting **net margin** (with a monthly income/expense/cumulative-margin chart). Neutral at `r_dep = 0`.
 - **Interactive charts** (Recharts) — cumulative liquidity (green/red split at zero), inflow vs. outflow, simulated balance sheet.
-- **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two risk variables.
+- **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two of 8 risk variables
+  (take-up, approval, runoff, churn, reserve ratio, α scale, price, deposit profit) × 5 metrics
+  (max hole, tipping point, end balance, leverage, net margin).
 - **Tier comparison table** — loan, installment (PMT), total fee, ROI, effective annual rate (IRR), true customer cost.
 - **Monthly cash-flow table** — filters, unit scaling, per-month drill-down by tier & vintage, CSV export.
 - **Methodology panel** — every formula shown with live-substituted values.
@@ -59,6 +63,14 @@
 - حداکثر کسری (Max Liquidity Hole): `min_t (CumLiq_t)`
 - هزینه پوشش کسری: `Σ_t max(0, −CumLiq_t) × r_ib / 12`
 - اهرم خروج: `(Σ Commitment + Σ Withdrawal) / (D × (1 − RR))` — اگر مخرج صفر و صورت مثبت باشد، `∞` (نه `0×`)
+
+### هـ) صورت سود و زیان شبیه‌سازی‌شده
+
+- سود پرداختی سپرده: `Profit_t = DepositBalance_t × r_dep / 12` (پایان هر ماه، روی ماندهٔ پایان دوره)
+- `Outflows_t = Σ Commitment + Σ Withdrawal + Profit_t` — یعنی سود سپرده یک خروجی نقد واقعی است و بر نقطهٔ واژگونی هم اثر می‌گذارد
+- درآمد خالص: `NII = Σ_t Income_t − Σ_t Profit_t`
+- حاشیهٔ خالص: `Margin = NII − Σ_t max(0, −CumLiq_t) × r_ib / 12`
+- حاشیهٔ تجمعی ماهانه: `Margin_t = Margin_(t−1) + Income_t − Profit_t − FundingCost_t`
 
 </div>
 
@@ -119,6 +131,7 @@ src/
     ├── TierBuilder.tsx        # §2 Dynamic tier builder + presets
     ├── CommitmentPanel.tsx    # §3 Manual resources + behavioral sliders
     ├── KpiBoard.tsx           # §3 KPI cards + risk banner + commitment table
+    ├── ProfitLossPanel.tsx    # §3 Simulated P&L (income / deposit profit / funding cost / net margin)
     ├── LiquidityCharts.tsx    # §4 Liquidity risk charts
     ├── SensitivityPanel.tsx   # §4-b 2-D stress heatmap
     ├── TierComparison.tsx     # §5 Sample-deposit comparison table
@@ -135,7 +148,11 @@ src/
 - **سقف فردی**: چون فرمول پایه تعهد شامل سقف نیست، سقف با کاهش ضریب مؤثر `α_eff` اعمال می‌شود؛ با تنظیم سقف روی صفر،
   نتیجه دقیقاً با فرمول پایه یکسان می‌شود.
 - **نرمال‌سازی تخصیص**: اگر مجموع سهم پله‌ها ۱۰۰٪ نباشد، سهم‌ها در محاسبات به‌طور خودکار نرمال می‌شوند و هشدار نمایش داده می‌شود.
-- **گزینه‌های خنثی به‌صورت پیش‌فرض**: آزادسازی سپرده قانونی (خاموش)، نرخ نکول اقساط (۰)، هزینه فرصت سپرده (فقط در جدول مقایسه).
+- **گزینه‌های خنثی به‌صورت پیش‌فرض**: آزادسازی سپرده قانونی (خاموش)، نرخ نکول اقساط (۰)، نرخ سود پرداختی سپرده (۰)،
+  هزینه فرصت سپرده (فقط در جدول مقایسه).
+- **سود پرداختی سپرده**: روی ماندهٔ پایان دورهٔ هر ماه محاسبه می‌شود (نه معدل ماهانه) تا برای ورود یکجا در ماه صفر، دقیقاً
+  به تعداد ماه‌های ماندگاری سود شناسایی شود. پیش‌تنظیم «نگین فراپویا» چون سپردهٔ سرمایه‌گذاری کوتاه‌مدت است، نرخ ۲۰٫۵٪ را
+  به‌صورت پیش‌فرض فعال می‌کند؛ دو طرح قرض‌الحسنه بدون سود (۰٪) هستند.
 - **حداقل مانده پله**: در برآورد تجمیعی، فقط وقتی میانگین سپرده هر مشتری به حداقل مانده پله برسد، تعهد وام برای آن پله محاسبه می‌شود؛ این تقریب، توزیع مانده مشتریان را مدل نمی‌کند.
 - **پله بدون اعطا**: پله‌ای که وامی اعطا نمی‌کند (حداقل مانده برآورده نشده یا `α_eff = 0`) وام‌گیرنده‌ای هم ندارد؛ بنابراین خروج سپرده‌اش فقط با `ω_churn` برآورد می‌شود و تعداد وام‌گیرندهٔ آن صفر گزارش می‌گردد (در جدول تعهدات با نشان «بدون اعطا» مشخص است).
 - **بهداشت ورودی موتور**: همهٔ ورودی‌های عددی (پله، پیکربندی، رفتار، زمان‌بندی) پیش از محاسبه با `finite`/`bounded` پالایش می‌شوند؛ یک مقدار `NaN`/خالی نمی‌تواند کل ماتریس و شاخص‌ها را `NaN` کند و داشبورد به‌اشتباه «پایدار» نشان دهد.

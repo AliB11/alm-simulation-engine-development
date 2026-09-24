@@ -109,6 +109,7 @@ export default function App() {
       contractType: p.contractType,
       ...(p.contractType === 'qard' ? { qardFeeRate: p.rate } : { murabahaRate: p.rate }),
       loanCap: p.loanCap,
+      depositProfitRate: p.depositProfitRate,
     }));
     setActivePreset(key);
     setToast(`پیش‌تنظیم «${p.name}» بارگذاری شد`);

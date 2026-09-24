@@ -6,6 +6,7 @@ import { commitmentFactor, uniformVintageCount, withdrawalFactor } from '../lib/
 import { useDisplay } from '../context/display';
 import { Badge, Button, Card, CardHeader, Field, Money, NumField, Segmented, SliderField } from './ui';
 import { KpiBoard, TierCommitmentTable } from './KpiBoard';
+import { ProfitLossPanel } from './ProfitLossPanel';
 
 const QUICK_AMOUNTS = [10e9, 50e9, 100e9, 500e9, 1e12];
 
@@ -317,6 +318,7 @@ export function CommitmentPanel({ behavior, onBehavior, schedule, onSchedule, co
 
       <div className="space-y-6 xl:col-span-7">
         <KpiBoard result={result} config={config} />
+        <ProfitLossPanel result={result} config={config} />
         <TierCommitmentTable result={result} />
       </div>
     </div>

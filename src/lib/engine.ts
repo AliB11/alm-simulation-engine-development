@@ -223,6 +223,7 @@ const EVENT_ORDER: Record<EventType, number> = {
   pmt: 3,
   loan: 4,
   withdrawal: 5,
+  profit: 6,
 };
 
 function emptyRow(t: number): MonthRow {
@@ -238,11 +239,14 @@ function emptyRow(t: number): MonthRow {
     inflow: 0,
     loanOut: 0,
     withdrawalOut: 0,
+    profitPaid: 0,
+    fundingCost: 0,
     outflow: 0,
     ncf: 0,
     cum: 0,
     depositBalance: 0,
     loanBook: 0,
+    cumMargin: 0,
     events: [],
   };
 }
@@ -323,6 +327,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     allocation: 0,
     rateOverride: null,
   };
+  /* منبع رویدادهای سطح پرتفوی (سود پرداختی به کل سپرده‌ها) */
+  const depositPool: Tier = { ...unallocated, id: '__deposit_pool', name: 'سپرده‌گذاران (کل منابع)' };
   for (const v of vintages) {
     const r0 = rows[v.month];
     r0.depositGross += v.amount;
@@ -438,20 +444,26 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   });
 
   /* ---- تجمیع ماتریس و محاسبه NCF / CumLiq ---- */
+  // سود پرداختی به سپرده‌گذاران: در پایان هر ماه روی ماندهٔ پایان دورهٔ همان ماه.
+  // نرخ صفر (پیش‌فرض) این جریان را کاملاً خنثی می‌کند.
+  const depMonthly = bounded(config.depositProfitRate, 0, MAX_RATE_PCT, 0) / 1200;
+  const ibMonthly = bounded(config.interbankRate, 0, MAX_RATE_PCT, 0) / 1200;
   let cum = initLiq;
   let dep = 0;
   let book = 0;
   for (const r of rows) {
-    r.inflow = r.depositNet + r.pmtInflow + r.reserveRelease;
-    r.outflow = r.loanOut + r.withdrawalOut;
-    r.ncf = r.inflow - r.outflow;
-    cum += r.ncf;
-    r.cum = cum;
     dep += depDelta[r.t];
     book += bookDelta[r.t];
     r.depositBalance = Math.max(0, dep);
     r.loanBook = Math.max(0, book);
+    r.profitPaid = r.depositBalance * depMonthly;
+    r.inflow = r.depositNet + r.pmtInflow + r.reserveRelease;
+    r.outflow = r.loanOut + r.withdrawalOut + r.profitPaid;
+    r.ncf = r.inflow - r.outflow;
+    cum += r.ncf;
+    r.cum = cum;
     if (maps) {
+      push(r.t, 'profit', depositPool, -1, r.profitPaid, r.t);
       r.events = Array.from(maps[r.t].values()).sort(
         (a, b) => EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.tierIndex - b.tierIndex,
       );
@@ -474,24 +486,32 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   let peakOutflowMonth = 0;
   let totalPmtInHorizon = 0;
   let totalIncomeInHorizon = 0;
-  const ibMonthly = bounded(config.interbankRate, 0, MAX_RATE_PCT, 0) / 1200;
+  let totalProfitPaid = 0;
+  let cumMargin = 0;
 
   for (const r of rows) {
     if (r.cum < minCum - EPS) {
       minCum = r.cum;
       minCumMonth = r.t;
     }
+    // هزینهٔ تأمین کسری در همان ماهی که کسری وجود دارد شناسایی می‌شود
+    const ibCost = r.cum < -EPS ? -r.cum * ibMonthly : 0;
     if (r.cum < -EPS) {
       deficitMonths++;
       if (tippingPoint === null) tippingPoint = r.t;
-      interbankCost += -r.cum * ibMonthly;
     }
+    interbankCost += ibCost;
+    r.fundingCost = ibCost;
     if (r.outflow > peakOutflow + EPS) {
       peakOutflow = r.outflow;
       peakOutflowMonth = r.t;
     }
     totalPmtInHorizon += r.pmtInflow;
     totalIncomeInHorizon += r.incomeIn;
+    totalProfitPaid += r.profitPaid;
+    // حاشیهٔ تجمعی بانک: درآمد کارمزد/سود − سود پرداختی سپرده − هزینهٔ تأمین کسری
+    cumMargin += r.incomeIn - r.profitPaid - ibCost;
+    r.cumMargin = cumMargin;
   }
 
   /* اهرم خروج: اگر منابع خالص صفر باشد (مثلاً RR = ۱۰۰٪) و همچنان خروجی وجود داشته
@@ -531,6 +551,10 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     borrowers,
     peakOutflow,
     peakOutflowMonth,
+    totalProfitPaid,
+    netInterestIncome: totalIncomeInHorizon - totalProfitPaid,
+    netMargin: cumMargin,
+    marginOnNetDeposit: netDeposit > EPS ? cumMargin / netDeposit : cumMargin > EPS ? Infinity : 0,
   };
 
   return { rows, tiers: tierResults, kpis, vintages };
@@ -625,9 +649,10 @@ export type SensVar =
   | 'churnRate'
   | 'reserveRatio'
   | 'alphaScale'
-  | 'rate';
+  | 'rate'
+  | 'profitRate';
 
-export type SensMetric = 'maxHole' | 'tipping' | 'endCum' | 'leverage';
+export type SensMetric = 'maxHole' | 'tipping' | 'endCum' | 'leverage' | 'margin';
 
 export interface SensVarDef {
   key: SensVar;
@@ -687,6 +712,13 @@ export const SENS_VARS: SensVarDef[] = [
     values: (i) => (i.config.contractType === 'qard' ? [0, 2, 4, 6, 8, 10, 12] : [5, 9, 13, 17, 21, 25, 29]),
     current: (i) => globalRate(i.config),
   },
+  {
+    key: 'profitRate',
+    label: 'سود پرداختی سپرده',
+    symbol: 'r_dep',
+    values: () => [0, 5, 10, 15, 20.5, 25, 30],
+    current: (i) => i.config.depositProfitRate,
+  },
 ];
 
 export function applySensitivity(input: SimInput, key: SensVar, value: number): SimInput {
@@ -699,6 +731,8 @@ export function applySensitivity(input: SimInput, key: SensVar, value: number): 
       return { ...input, behavior: { ...input.behavior, [key]: bounded(value, 0, 100, 0) } };
     case 'reserveRatio':
       return { ...input, config: { ...input.config, reserveRatio: bounded(value, 0, 100, 0) } };
+    case 'profitRate':
+      return { ...input, config: { ...input.config, depositProfitRate: bounded(value, 0, 100, 0) } };
     case 'alphaScale':
       return {
         ...input,

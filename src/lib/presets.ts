@@ -25,6 +25,8 @@ export interface Preset {
   contractType: ContractType;
   rate: number;
   loanCap: number;
+  /** نرخ سود پرداختی روی خود سپرده (سپردهٔ قرض‌الحسنه = ۰، سپردهٔ سرمایه‌گذاری = نرخ مصوب) */
+  depositProfitRate: number;
   tiers: Omit<Tier, 'id'>[];
 }
 
@@ -42,6 +44,7 @@ export const PRESETS: Preset[] = [
     contractType: 'qard',
     rate: 4,
     loanCap: 300_000_000,
+    depositProfitRate: 0,
     tiers: [
       { name: 'مهربانی ۱ ماهه / ۶ قسط', tDep: 1, tLoan: 6, alpha: 60, minBalance: 5_000_000, allocation: 10, rateOverride: null },
       { name: 'مهربانی ۳ ماهه / ۱۲ قسط', tDep: 3, tLoan: 12, alpha: 90, minBalance: 10_000_000, allocation: 15, rateOverride: null },
@@ -60,6 +63,7 @@ export const PRESETS: Preset[] = [
     contractType: 'qard',
     rate: 4,
     loanCap: 300_000_000,
+    depositProfitRate: 0,
     tiers: [
       { name: 'نیک ۱ ماهه / ۱۲ قسط', tDep: 1, tLoan: 12, alpha: 27, minBalance: 1_000_000, allocation: 10, rateOverride: null },
       { name: 'نیک ۳ ماهه / ۲۴ قسط', tDep: 3, tLoan: 24, alpha: 40, minBalance: 1_000_000, allocation: 15, rateOverride: null },
@@ -74,10 +78,11 @@ export const PRESETS: Preset[] = [
     name: 'طرح نگین فراپویا',
     bank: 'بانک سپه',
     description:
-      'سپرده کوتاه‌مدت ماه‌شمار ویژه + تسهیلات مرابحه ۵ تا ۲۱٪؛ انتظار ۳ تا ۱۲ ماه؛ ضریب ۲۵ تا ۲۰۰٪؛ هر ماه انتظار اضافه = ۸ قسط بیشتر یا ۲۵٪ ضریب بیشتر یا ۲٪ نرخ کمتر.',
+      'سپرده کوتاه‌مدت ماه‌شمار ویژه (با سود پرداختی ≈۲۰٫۵٪ سالانه) + تسهیلات مرابحه ۵ تا ۲۱٪؛ انتظار ۳ تا ۱۲ ماه؛ ضریب ۲۵ تا ۲۰۰٪؛ هر ماه انتظار اضافه = ۸ قسط بیشتر یا ۲۵٪ ضریب بیشتر یا ۲٪ نرخ کمتر.',
     contractType: 'murabaha',
     rate: 21,
     loanCap: 400_000_000,
+    depositProfitRate: 20.5,
     tiers: [
       { name: 'نگین پایه ۳ ماهه', tDep: 3, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 20, rateOverride: null },
       { name: 'نگین ۶ ماهه — افزایش ضریب', tDep: 6, tLoan: 16, alpha: 100, minBalance: 1_000_000, allocation: 20, rateOverride: null },
@@ -108,6 +113,7 @@ export const DEFAULT_CONFIG: GlobalConfig = {
   defaultRate: 0,
   interbankRate: 23,
   opportunityRate: 23,
+  depositProfitRate: 0,
 };
 
 export const DEFAULT_BEHAVIOR: Behavior = {

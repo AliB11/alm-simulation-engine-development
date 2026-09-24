@@ -6,9 +6,21 @@ import { tierColor } from '../lib/presets';
 import { useDisplay } from '../context/display';
 import { Card, CardHeader } from './ui';
 
-function Step({ letter, title, desc, children }: { letter: string; title: string; desc: ReactNode; children: ReactNode }) {
+function Step({
+  letter,
+  title,
+  desc,
+  children,
+  className,
+}: {
+  letter: string;
+  title: string;
+  desc: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800">
+    <div className={'rounded-xl border border-slate-200/80 p-4 dark:border-slate-800' + (className ? ` ${className}` : '')}>
       <div className="mb-2 flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-[13px] font-black text-white">
           {letter}
@@ -178,6 +190,29 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`min(CumLiq) = ${m(k.minCum)} at month ${toFa(k.minCumMonth)}`}>Max Liquidity Hole = min_t (CumLiq_t)</Formula>
             <Formula live={`Interbank cost ≈ ${m(k.interbankCost)}  (r_ib = ${p(config.interbankRate)}%)`}>
               Funding Cost = Σ_t max(0, −CumLiq_t) × r_ib / 12
+            </Formula>
+          </Step>
+
+          <Step
+            letter="هـ"
+            className="lg:col-span-2"
+            title="صورت سود و زیان — حاشیهٔ خالص بانک در افق"
+            desc="سه جریان سود/هزینه شناسایی می‌شود: درآمد کارمزد یا سود اقساط وصول‌شده، سود پرداختی روی مانده سپرده‌ها در پایان هر ماه، و هزینهٔ تأمین کسری نقدینگی از بازار بین‌بانکی. نرخ سود سپرده صفر (پیش‌فرض) این لایه را خنثی نگه می‌دارد."
+          >
+            <Formula
+              live={`Profit_t = Bal_t × ${p(config.depositProfitRate / 1200, 6)}   →   Σ = ${m(k.totalProfitPaid)}`}
+            >
+              Deposit Profit_t = DepositBalance_t × r_dep / 12
+            </Formula>
+            <Formula live={`NII = ${m(k.totalIncomeInHorizon)} − ${m(k.totalProfitPaid)} = ${m(k.netInterestIncome)}`}>
+              Net Interest Income = Σ Fee/Profit Collected − Σ Deposit Profit
+            </Formula>
+            <Formula
+              live={`Margin = ${m(k.netInterestIncome)} − ${m(k.interbankCost)} = ${m(k.netMargin)}   (${
+                Number.isFinite(k.marginOnNetDeposit) ? `${p(k.marginOnNetDeposit * 100, 2)}% of net resources` : 'net resources = 0'
+              })`}
+            >
+              Net Margin = NII − Interbank Funding Cost
             </Formula>
           </Step>
         </div>

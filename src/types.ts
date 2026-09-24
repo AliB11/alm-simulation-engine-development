@@ -47,6 +47,8 @@ export interface GlobalConfig {
   interbankRate: number;
   /** نرخ هزینه فرصت سپرده برای مشتری (درصد سالانه) */
   opportunityRate: number;
+  /** نرخ سود سالانهٔ پرداختی بانک روی مانده سپرده‌ها (درصد) — صفر یعنی خنثی (سپردهٔ قرض‌الحسنه بدون سود) */
+  depositProfitRate: number;
 }
 
 export interface Behavior {
@@ -91,7 +93,7 @@ export interface Vintage {
   amount: number;
 }
 
-export type EventType = 'deposit' | 'reserve' | 'release' | 'pmt' | 'loan' | 'withdrawal';
+export type EventType = 'deposit' | 'reserve' | 'release' | 'pmt' | 'loan' | 'withdrawal' | 'profit';
 
 /** تراکنش تجمیع‌شده یک ماه به تفکیک نوع رویداد و پله */
 export interface FlowEvent {
@@ -121,11 +123,17 @@ export interface MonthRow {
   inflow: number;
   loanOut: number;
   withdrawalOut: number;
+  /** سود پرداختی به سپرده‌گذاران در پایان این ماه (روی ماندهٔ پایان دوره) */
+  profitPaid: number;
+  /** هزینهٔ تأمین کسری نقدینگی از بازار بین‌بانکی در این ماه */
+  fundingCost: number;
   outflow: number;
   ncf: number;
   cum: number;
   depositBalance: number;
   loanBook: number;
+  /** حاشیهٔ تجمعی بانک: Σ(درآمد کارمزد/سود − سود سپرده − هزینهٔ تأمین کسری) */
+  cumMargin: number;
   events: FlowEvent[];
 }
 
@@ -176,6 +184,14 @@ export interface SimKpis {
   borrowers: number;
   peakOutflow: number;
   peakOutflowMonth: number;
+  /** Σ سود پرداختی به سپرده‌گذاران در افق */
+  totalProfitPaid: number;
+  /** درآمد خالص کارمزد/سود: درآمد وصولی − سود پرداختی سپرده */
+  netInterestIncome: number;
+  /** حاشیهٔ خالص پس از هزینهٔ تأمین کسری از بازار بین‌بانکی */
+  netMargin: number;
+  /** حاشیهٔ خالص به‌درصد منابع ورودی خالص */
+  marginOnNetDeposit: number;
 }
 
 export interface SimResult {

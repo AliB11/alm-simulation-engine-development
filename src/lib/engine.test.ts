@@ -16,6 +16,7 @@ const config: GlobalConfig = {
   defaultRate: 0,
   interbankRate: 23,
   opportunityRate: 23,
+  depositProfitRate: 0,
 };
 
 const behavior: Behavior = {
@@ -40,6 +41,8 @@ const tier: Tier = {
 
 const lump: DepositSchedule = { mode: 'lump', uniformMonths: 1, custom: [] };
 const input: SimInput = { config, behavior, tiers: [tier], schedule: lump };
+
+const near = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(a), Math.abs(b));
 
 const expectClose = (actual: number, expected: number) =>
   assert.ok(Math.abs(actual - expected) <= 1e-8, `expected ${actual} to be close to ${expected}`);
@@ -223,5 +226,84 @@ describe('ALM engine robustness and internal consistency', () => {
     assert.equal(uniformVintageCount({ mode: 'uniform', uniformMonths: 99, custom: [] }, 12), 13);
     assert.equal(uniformVintageCount({ mode: 'uniform', uniformMonths: NaN, custom: [] }, 12), 1);
     assert.equal(buildVintages(1_000, { mode: 'uniform', uniformMonths: 99, custom: [] }, 12).length, 13);
+  });
+});
+
+describe('deposit profit and simulated P&L', () => {
+  const pAndL: SimInput = {
+    config: { ...config, reserveRatio: 0, horizon: 12, interbankRate: 0, defaultRate: 0 },
+    behavior,
+    tiers: [{ ...tier, tDep: 3, tLoan: 6 }],
+    schedule: lump,
+  };
+
+  it('stays completely neutral at the default zero rate', () => {
+    const result = simulate(pAndL);
+    assert.equal(result.kpis.totalProfitPaid, 0);
+    assert.ok(result.rows.every((r) => r.profitPaid === 0));
+    assert.equal(result.kpis.netInterestIncome, result.kpis.totalIncomeInHorizon);
+    assert.equal(result.kpis.netMargin, result.kpis.totalIncomeInHorizon - result.kpis.interbankCost);
+    assert.ok(result.rows.every((r) => near(r.outflow, r.loanOut + r.withdrawalOut)));
+  });
+
+  it('accrues profit on the closing deposit balance of each month', () => {
+    const rate = 20;
+    const result = simulate({ ...pAndL, config: { ...pAndL.config, depositProfitRate: rate } });
+    const monthly = rate / 1200;
+    for (const r of result.rows) assert.ok(Math.abs(r.profitPaid - r.depositBalance * monthly) < 1e-6);
+
+    // closed form: months 0..tDep-1 carry the full deposit, tDep..H the post-runoff balance
+    const D = behavior.totalDeposit;
+    const tDep = 3;
+    const H = 12;
+    const wd = result.kpis.totalWithdrawal;
+    const expected = monthly * (tDep * D + (H + 1 - tDep) * (D - wd));
+    expectClose(result.kpis.totalProfitPaid, expected);
+  });
+
+  it('keeps the P&L identity and cumulative margin consistent month by month', () => {
+    const result = simulate({ ...pAndL, config: { ...pAndL.config, depositProfitRate: 18, interbankRate: 23 } });
+    let margin = 0;
+    for (const r of result.rows) {
+      margin += r.incomeIn - r.profitPaid - r.fundingCost;
+      assert.ok(Math.abs(r.cumMargin - margin) < 1e-6, `cumMargin drifted at month ${r.t}`);
+    }
+    expectClose(result.kpis.netInterestIncome, result.kpis.totalIncomeInHorizon - result.kpis.totalProfitPaid);
+    expectClose(result.kpis.netMargin, margin);
+    expectClose(result.kpis.interbankCost, result.rows.reduce((s, r) => s + r.fundingCost, 0));
+  });
+
+  it('feeds deposit profit into liquidity risk, not just the P&L', () => {
+    const neutral = simulate(pAndL).kpis;
+    const paying = simulate({ ...pAndL, config: { ...pAndL.config, depositProfitRate: 25 } }).kpis;
+    assert.ok(paying.endCum < neutral.endCum, 'paying deposit profit must reduce cumulative liquidity');
+    assert.ok(paying.maxHole >= neutral.maxHole);
+    assert.ok(paying.totalProfitPaid > 0);
+    assert.ok(
+      (paying.tippingPoint ?? Infinity) <= (neutral.tippingPoint ?? Infinity),
+      'the tipping point cannot move later when an extra outflow is added',
+    );
+  });
+
+  it('exposes the deposit rate as a sensitivity axis and keeps the current cell identical', () => {
+    const input: SimInput = { ...pAndL, config: { ...pAndL.config, depositProfitRate: 18 } };
+    const shocked = applySensitivity(input, 'profitRate', 25);
+    assert.equal(shocked.config.depositProfitRate, 25);
+    assert.equal(input.config.depositProfitRate, 18, 'applySensitivity must not mutate its input');
+
+    const grid = runSensitivity(input, 'profitRate', 'takeUpRate');
+    assert.ok(grid.xs.includes(18));
+    const cell = grid.cells[grid.yi][grid.xi];
+    const ref = simulate(input, false).kpis;
+    expectClose(cell.netMargin, ref.netMargin);
+    expectClose(cell.maxHole, ref.maxHole);
+    assert.ok(grid.cells.every((row) => row.every((c) => Number.isFinite(c.netMargin))));
+  });
+
+  it('ignores a malformed deposit rate instead of poisoning the matrix', () => {
+    const result = simulate({ ...pAndL, config: { ...pAndL.config, depositProfitRate: NaN } });
+    assert.equal(result.kpis.totalProfitPaid, 0);
+    assert.ok(result.rows.every((r) => Number.isFinite(r.cum) && Number.isFinite(r.cumMargin)));
+    assert.ok(Number.isFinite(result.kpis.netMargin) && Number.isFinite(result.kpis.marginOnNetDeposit));
   });
 });

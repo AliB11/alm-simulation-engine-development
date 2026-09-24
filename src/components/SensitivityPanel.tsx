@@ -12,6 +12,7 @@ const METRICS: { value: SensMetric; label: string }[] = [
   { value: 'tipping', label: 'نقطه واژگونی' },
   { value: 'endCum', label: 'تراز پایان افق' },
   { value: 'leverage', label: 'اهرم خروج' },
+  { value: 'margin', label: 'حاشیهٔ خالص' },
 ];
 
 function metricValue(k: SimKpis, m: SensMetric): number | null {
@@ -24,6 +25,8 @@ function metricValue(k: SimKpis, m: SensMetric): number | null {
       return k.endCum;
     case 'leverage':
       return k.leverage;
+    case 'margin':
+      return k.netMargin;
   }
 }
 
@@ -83,6 +86,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
       case 'tipping':
         return v === null ? green(0.5) : red(Math.min(1, 1 - v / Math.max(1, H)));
       case 'endCum':
+      case 'margin':
         if (v === null || !Number.isFinite(v)) return green(0);
         return v < 0 ? red(Math.min(1, -v / maxNeg)) : green(Math.min(1, v / maxPos));
       case 'leverage':
@@ -99,6 +103,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
       case 'tipping':
         return v === null ? '✓' : `ماه ${toFa(v)}`;
       case 'endCum':
+      case 'margin':
         return v === null ? '—' : fmtNumber((v * factor) / moneyUnit.div, 1);
       case 'leverage':
         return v === null ? '—' : `${fmtRatio(v)}×`;
@@ -106,7 +111,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
   };
 
   const unitNote =
-    metric === 'maxHole' || metric === 'endCum'
+    metric === 'maxHole' || metric === 'endCum' || metric === 'margin'
       ? `ارقام به ${moneyUnit.label} ${unit}`
       : metric === 'tipping'
         ? '✓ یعنی بدون واژگونی در افق'
