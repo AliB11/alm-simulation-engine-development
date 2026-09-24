@@ -16,4 +16,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    // The dev server must be reachable from container/preview environments where
+    // the host name is a dynamic domain, so bind all interfaces and accept any host.
+    host: true,
+    allowedHosts: true,
+  },
 });

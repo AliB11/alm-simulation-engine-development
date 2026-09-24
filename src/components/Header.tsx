@@ -19,7 +19,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import type { Currency, SimKpis } from '../types';
-import { fmtNumber, toFa } from '../lib/format';
+import { fmtRatio, toFa } from '../lib/format';
 import { IconButton, Money, Segmented } from './ui';
 import { cn } from '../utils/cn';
 
@@ -29,7 +29,9 @@ const NAV = [
   { id: 'commitments', label: 'منابع و تعهدات', icon: Wallet },
   { id: 'charts', label: 'نمودارهای ریسک', icon: ChartArea },
   { id: 'stress', label: 'آزمون حساسیت', icon: FlaskConical },
-  { id: 'tables', label: 'جداول', icon: Table2 },
+  { id: 'advanced', label: 'مونت‌کارلو و بهینه‌یاب', icon: Activity },
+  { id: 'regulatory', label: 'سنجه‌های مقرراتی', icon: ShieldCheck },
+  { id: 'tables', label: 'مقایسه و جداول', icon: Table2 },
   { id: 'method', label: 'روش‌شناسی', icon: SquareFunction },
 ];
 
@@ -151,8 +153,16 @@ export function Header({
             <span className="hidden items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 lg:flex">
               اهرم خروج:
               <span className={kpis.leverage > 1 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                {fmtNumber(kpis.leverage, 2, true)}×
+                {fmtRatio(kpis.leverage)}×
               </span>
+            </span>
+            <span className="hidden items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 xl:flex">
+              حاشیهٔ خالص:
+              <Money
+                compact
+                value={kpis.netMargin}
+                className={kpis.netMargin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
+              />
             </span>
           </div>
         </div>

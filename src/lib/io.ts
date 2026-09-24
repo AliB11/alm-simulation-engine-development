@@ -1,7 +1,12 @@
-import type { Behavior, Currency, DepositSchedule, GlobalConfig, MonthRow, Tier } from '../types';
+import type { Behavior, Currency, DepositSchedule, GlobalConfig, MonthRow, SimKpis, Tier } from '../types';
 import { DEFAULT_BEHAVIOR, DEFAULT_CONFIG, DEFAULT_SCHEDULE, PRESETS } from './presets';
+import { EVENT_META } from './eventMeta';
+import { TIER_ALPHA_MAX } from './limits';
+import { DEFAULT_REGULATORY, type RegulatoryParams } from './regulatory';
+import { EMPTY_SLOTS, SLOT_IDS, type ScenarioSlot, type ScenarioSlots } from './scenarios';
 
 const STATE_KEY = 'alm-sim-state-v2';
+const SLOTS_KEY = 'alm-sim-scenario-slots-v1';
 export const THEME_KEY = 'alm-theme';
 
 export interface PersistedState {
@@ -11,6 +16,8 @@ export interface PersistedState {
   schedule: DepositSchedule;
   activePreset: string | null;
   currency: Currency;
+  /** ضرایب سنجه‌های مقرراتی‌مانند — اختیاری تا بارهای قدیمی معتبر بمانند */
+  regulatory?: RegulatoryParams;
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -37,6 +44,7 @@ function sanitizeConfig(v: unknown): GlobalConfig | undefined {
     defaultRate: finiteNumber(v.defaultRate, DEFAULT_CONFIG.defaultRate, 0, 100),
     interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, 100),
     opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, 100),
+    depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, 100),
   };
 }
 
@@ -66,7 +74,7 @@ function sanitizeTiers(v: unknown): Tier[] | undefined {
       name: typeof item.name === 'string' ? item.name.slice(0, 120) : `پله ${i + 1}`,
       tDep: finiteNumber(item.tDep, 1, 1, 12, true),
       tLoan: finiteNumber(item.tLoan, 12, 6, 60, true),
-      alpha: finiteNumber(item.alpha, 100, 0, 500),
+      alpha: finiteNumber(item.alpha, 100, 0, TIER_ALPHA_MAX),
       minBalance: finiteNumber(item.minBalance, 0, 0, 1e16),
       allocation: finiteNumber(item.allocation, 0, 0, 100),
       rateOverride:
@@ -76,6 +84,15 @@ function sanitizeTiers(v: unknown): Tier[] | undefined {
     });
   });
   return out;
+}
+
+function sanitizeRegulatory(v: unknown): RegulatoryParams | undefined {
+  if (!isObj(v)) return undefined;
+  return {
+    stressRunoff: finiteNumber(v.stressRunoff, DEFAULT_REGULATORY.stressRunoff, 0, 100),
+    stableWeight: finiteNumber(v.stableWeight, DEFAULT_REGULATORY.stableWeight, 0, 100),
+    loanWeight: finiteNumber(v.loanWeight, DEFAULT_REGULATORY.loanWeight, 0, 100),
+  };
 }
 
 function sanitizeSchedule(v: unknown, horizon: number): DepositSchedule | undefined {
@@ -120,6 +137,11 @@ export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
     out.activePreset = null;
   }
   if (raw.currency === 'toman' || raw.currency === 'rial') out.currency = raw.currency;
+  const regulatory = sanitizeRegulatory(raw.regulatory);
+  if (regulatory) out.regulatory = regulatory;
+  // A payload without a single recognizable section is not a scenario at all —
+  // rejecting it keeps a bogus file from silently wiping the active preset.
+  if (Object.keys(out).length === 0) return null;
   return out;
 }
 
@@ -160,7 +182,8 @@ export function downloadFile(filename: string, content: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function exportCashFlowCsv(rows: MonthRow[], factor: number, unit: string) {
+/** ساخت متن CSV ماتریس جریان نقد (بدون دانلود) — قابل آزمون در محیط نود */
+export function buildCashFlowCsv(rows: MonthRow[], factor: number, unit: string): string {
   const header = [
     'ماه',
     `سپرده جدید (${unit})`,
@@ -173,11 +196,14 @@ export function exportCashFlowCsv(rows: MonthRow[], factor: number, unit: string
     `جمع ورودی (${unit})`,
     `تعهد اعطای وام (${unit})`,
     `خروج سپرده (${unit})`,
+    `سود پرداختی سپرده (${unit})`,
     `جمع خروجی (${unit})`,
     `خالص جریان نقد NCF (${unit})`,
     `نقدینگی تجمعی CumLiq (${unit})`,
     `مانده سپرده (${unit})`,
     `مانده تسهیلات (${unit})`,
+    `هزینه تامین کسری ماهانه (${unit})`,
+    `حاشیه تجمعی بانک (${unit})`,
   ];
   const r = (v: number) => Math.round(v * factor);
   const lines = [header.join(',')];
@@ -195,15 +221,202 @@ export function exportCashFlowCsv(rows: MonthRow[], factor: number, unit: string
         r(row.inflow),
         r(row.loanOut),
         r(row.withdrawalOut),
+        r(row.profitPaid),
         r(row.outflow),
         r(row.ncf),
         r(row.cum),
         r(row.depositBalance),
         r(row.loanBook),
+        r(row.fundingCost),
+        r(row.cumMargin),
       ].join(','),
     );
   }
-  downloadFile('alm-cashflow-matrix.csv', '\uFEFF' + lines.join('\n'), 'text/csv;charset=utf-8;');
+  return '\uFEFF' + lines.join('\n');
+}
+
+export function exportCashFlowCsv(rows: MonthRow[], factor: number, unit: string) {
+  downloadFile('alm-cashflow-matrix.csv', buildCashFlowCsv(rows, factor, unit), 'text/csv;charset=utf-8;');
+}
+
+/* ------------------------- خروجی دفتر کل رویدادمحور ------------------------- */
+
+const LEDGER_ORDER: MonthRow['events'][number]['type'][] = [
+  'deposit',
+  'reserve',
+  'release',
+  'pmt',
+  'loan',
+  'withdrawal',
+  'profit',
+];
+
+/**
+ * دفتر کل کامل: هر رویداد ثبت‌شده در ماتریس جریان نقد به یک سطر تبدیل
+ * می‌شود (ماه، نوع رویداد، پله، بازهٔ ویژه‌ها، قسط، مبلغ با علامت، جهت).
+ * این خروجی برای انتقال به اکسل/BI و راستی‌آزمایی دستی ارقام موتور است.
+ */
+/** ساخت متن CSV دفتر کل رویدادمحور (بدون دانلود) — قابل آزمون در محیط نود */
+export function buildLedgerCsv(rows: MonthRow[], factor: number, unit: string): string {
+  const csvText = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const header = [
+    'ماه',
+    'رویداد',
+    'پله',
+    'بازه ویژه',
+    'تعداد ویژه',
+    'اقساط',
+    `مبلغ (${unit})`,
+    'جهت',
+    `خالص جریان نقد ماه (${unit})`,
+    `نقدینگی تجمعی (${unit})`,
+    `مانده سپرده (${unit})`,
+    `مانده تسهیلات (${unit})`,
+  ];
+  const r = (v: number) => Math.round(v * factor);
+  const lines = [header.join(',')];
+  let total = 0;
+  for (const row of rows) {
+    const events = row.events.slice().sort((a, b) => LEDGER_ORDER.indexOf(a.type) - LEDGER_ORDER.indexOf(b.type));
+    for (const e of events) {
+      const meta = EVENT_META[e.type];
+      const signed = meta.sign * e.amount;
+      total += signed;
+      const vintage =
+        e.vintageFrom === e.vintageTo ? `${e.vintageFrom}` : `${e.vintageFrom}-${e.vintageTo}`;
+      const inst =
+        e.instFrom !== undefined && e.instTo !== undefined && e.instTotal !== undefined
+          ? e.instFrom === e.instTo
+            ? `${e.instFrom}/${e.instTotal}`
+            : `${e.instFrom}-${e.instTo}/${e.instTotal}`
+          : '';
+      lines.push(
+        [
+          row.t,
+          csvText(meta.label),
+          csvText(e.tierIndex >= 0 ? e.tierName : 'سپرده‌گذاران (کل منابع)'),
+          vintage,
+          e.vintages,
+          inst,
+          r(signed),
+          csvText(meta.sign > 0 ? 'ورودی' : 'خروجی'),
+          r(row.ncf),
+          r(row.cum),
+          r(row.depositBalance),
+          r(row.loanBook),
+        ].join(','),
+      );
+    }
+  }
+  lines.push(['', csvText('جمع کل'), '', '', '', '', r(total), '', '', '', '', ''].join(','));
+  return '\uFEFF' + lines.join('\n');
+}
+
+export function exportLedgerCsv(rows: MonthRow[], factor: number, unit: string) {
+  downloadFile('alm-general-ledger.csv', buildLedgerCsv(rows, factor, unit), 'text/csv;charset=utf-8;');
+}
+
+/* ----------------------------- جایگاه‌های سناریو ----------------------------- */
+
+const ZERO_KPIS: SimKpis = {
+  totalDeposit: 0,
+  netDeposit: 0,
+  reserveHeld: 0,
+  totalCommitment: 0,
+  totalWithdrawal: 0,
+  leverage: 0,
+  minCum: 0,
+  minCumMonth: 0,
+  maxHole: 0,
+  tippingPoint: null,
+  recoveryMonth: null,
+  deficitMonths: 0,
+  endCum: 0,
+  totalPmtInHorizon: 0,
+  totalIncomeInHorizon: 0,
+  pmtBeyondHorizon: 0,
+  commitmentsBeyondHorizon: 0,
+  interbankCost: 0,
+  borrowers: 0,
+  peakOutflow: 0,
+  peakOutflowMonth: 0,
+  totalProfitPaid: 0,
+  netInterestIncome: 0,
+  netMargin: 0,
+  marginOnNetDeposit: 0,
+};
+
+const NULLABLE_KPIS: (keyof SimKpis)[] = ['tippingPoint', 'recoveryMonth'];
+
+function sanitizeKpis(v: unknown): SimKpis | undefined {
+  if (!isObj(v)) return undefined;
+  const out: SimKpis = { ...ZERO_KPIS };
+  const bag = out as unknown as Record<string, number | null>;
+  for (const key of Object.keys(ZERO_KPIS) as (keyof SimKpis)[]) {
+    const raw = v[key];
+    if (raw === null || raw === undefined) {
+      if (NULLABLE_KPIS.includes(key)) bag[key] = null;
+      continue;
+    }
+    const n = typeof raw === 'number' || typeof raw === 'string' ? Number(raw) : NaN;
+    if (Number.isFinite(n)) bag[key] = n;
+  }
+  return out;
+}
+
+function sanitizeSlot(raw: unknown): ScenarioSlot | undefined {
+  if (!isObj(raw)) return undefined;
+  const config = sanitizeConfig(raw.config);
+  const behavior = sanitizeBehavior(raw.behavior);
+  const tiers = sanitizeTiers(raw.tiers);
+  const kpis = sanitizeKpis(raw.kpis);
+  if (!config || !behavior || !tiers || !kpis) return undefined;
+  const schedule = sanitizeSchedule(raw.schedule, config.horizon) ?? DEFAULT_SCHEDULE;
+  const savedAt = Number(raw.savedAt);
+  return {
+    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 60) : 'سناریوی ذخیره‌شده',
+    savedAt: Number.isFinite(savedAt) ? savedAt : Date.now(),
+    config,
+    tiers,
+    behavior,
+    schedule,
+    kpis,
+  };
+}
+
+export function sanitizeSlots(raw: unknown): ScenarioSlots {
+  const out: ScenarioSlots = { ...EMPTY_SLOTS };
+  if (!isObj(raw)) return out;
+  for (const id of SLOT_IDS) {
+    const slot = sanitizeSlot(raw[id]);
+    if (slot) out[id] = slot;
+  }
+  return out;
+}
+
+export function loadSlots(): ScenarioSlots {
+  try {
+    const raw = localStorage.getItem(SLOTS_KEY);
+    return raw ? sanitizeSlots(JSON.parse(raw)) : { ...EMPTY_SLOTS };
+  } catch {
+    return { ...EMPTY_SLOTS };
+  }
+}
+
+export function saveSlots(slots: ScenarioSlots) {
+  try {
+    localStorage.setItem(SLOTS_KEY, JSON.stringify(slots));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+export function clearSlots() {
+  try {
+    localStorage.removeItem(SLOTS_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function exportScenario(state: PersistedState) {

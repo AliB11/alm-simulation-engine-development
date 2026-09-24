@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash } from 'lucide-react';
 import type { GlobalConfig, Tier, TierResult } from '../types';
 import { PRESETS, tierColor, uid } from '../lib/presets';
+import { TIER_ALPHA_MAX } from '../lib/limits';
 import { globalRate } from '../lib/engine';
 import { fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
@@ -221,7 +222,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                       size="sm"
                       value={t.alpha}
                       min={5}
-                      max={500}
+                      max={TIER_ALPHA_MAX}
                       step={5}
                       decimals={1}
                       onChange={(v) => update(t.id, { alpha: v })}

@@ -1,14 +1,28 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Sigma, SquareFunction } from 'lucide-react';
 import type { Behavior, GlobalConfig, SimResult } from '../types';
-import { fmtRaw, toFa } from '../lib/format';
+import { tierAttribution } from '../lib/attribution';
+import { fmtPct, fmtRaw, fmtRatio, toFa } from '../lib/format';
 import { tierColor } from '../lib/presets';
+import { computeRegulatory, type RegulatoryParams } from '../lib/regulatory';
 import { useDisplay } from '../context/display';
 import { Card, CardHeader } from './ui';
 
-function Step({ letter, title, desc, children }: { letter: string; title: string; desc: ReactNode; children: ReactNode }) {
+function Step({
+  letter,
+  title,
+  desc,
+  children,
+  className,
+}: {
+  letter: string;
+  title: string;
+  desc: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800">
+    <div className={'rounded-xl border border-slate-200/80 p-4 dark:border-slate-800' + (className ? ` ${className}` : '')}>
       <div className="mb-2 flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-[13px] font-black text-white">
           {letter}
@@ -37,13 +51,20 @@ interface Props {
   result: SimResult;
   config: GlobalConfig;
   behavior: Behavior;
+  regulatory: RegulatoryParams;
 }
 
-export function Methodology({ result, config, behavior }: Props) {
+export function Methodology({ result, config, behavior, regulatory }: Props) {
   const { factor, unit } = useDisplay();
   const [sel, setSel] = useState(0);
   const tr = result.tiers[Math.min(sel, Math.max(0, result.tiers.length - 1))];
   const k = result.kpis;
+  const reg = useMemo(() => computeRegulatory(result.rows, regulatory), [result.rows, regulatory]);
+  const attr = useMemo(() => tierAttribution(result.rows, tierColor), [result.rows]);
+  const worst = attr.tiers.reduce(
+    (acc, t) => (acc === null || t.holeDelta < acc.holeDelta ? t : acc),
+    null as (typeof attr.tiers)[number] | null,
+  );
   const m = (v: number) => fmtRaw(Math.round(v * factor));
   const p = (v: number, d = 2) => fmtRaw(v, d);
   const take = behavior.takeUpRate / 100;
@@ -102,6 +123,12 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`Total = ${m(tr.monthlyPmt)} × ${toFa(tr.tier.tLoan)} = ${m(tr.totalRepay)}  |  Fee = ${m(tr.totalIncome)}`}>
               Total Repayment = PMT × T_loan ;  Fee / Profit = Total − L
             </Formula>
+            {config.defaultRate > 0 && (
+              <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+                ارقام بالا <b>قراردادی</b> هستند (بدون در نظر گرفتن نکول). با نرخ نکول {fmtPct(config.defaultRate)}، مجموع اقساط
+                وصول‌شده در افق {m(k.totalPmtInHorizon)} و درآمد کارمزد/سود وصول‌شده {m(k.totalIncomeInHorizon)} {unit} است.
+              </p>
+            )}
           </Step>
 
           <Step
@@ -110,15 +137,27 @@ export function Methodology({ result, config, behavior }: Props) {
             desc="به دلیل ممنوعیت مسدودسازی سپرده، در ماه سررسید T_dep دو رویداد خروجی همزمان رخ می‌دهد: اعطای وام و برداشت اصل سپرده."
           >
             <Formula
-              live={`α_eff = min(${p(tr.tier.alpha / 100, 2)}, ${config.loanCap > 0 ? `${m(config.loanCap)} / ${m(tr.repBalance)}` : '∞'}) = ${p(tr.alphaEff, 4)}`}
+              live={`α_eff = min(${p(tr.tier.alpha / 100, 2)}, ${
+                config.loanCap > 0 && tr.repBalance > 0 ? `${m(config.loanCap)} / ${m(tr.repBalance)}` : '∞'
+              }) = ${p(tr.alphaEff, 4)}`}
             >
               α_eff = min(α , Cap / max(AvgTicket, MinBalance))
             </Formula>
-            <Formula live={`L = ${m(tr.deposit)} × ${p(tr.alphaEff, 4)} × ${p(take)} × ${p(app)} = ${m(tr.commitment)}`}>
+            <Formula
+              live={
+                tr.lends
+                  ? `L = ${m(tr.deposit)} × ${p(tr.alphaEff, 4)} × ${p(take)} × ${p(app)} = ${m(tr.commitment)}`
+                  : `L = 0   —   ${tr.eligible ? 'α_eff = 0' : 'AvgTicket < MinBalance'} ⇒ this tier grants no loan`
+              }
+            >
               Commitment_loan = D × α × ρ_take × ρ_app
             </Formula>
             <Formula
-              live={`W = ${m(tr.deposit)} × [${p(take)}×${p(ww)} + ${p(1 - take)}×${p(wc)}] = ${m(tr.withdrawal)}`}
+              live={
+                tr.lends
+                  ? `W = ${m(tr.deposit)} × [${p(take)}×${p(ww)} + ${p(1 - take)}×${p(wc)}] = ${m(tr.withdrawal)}`
+                  : `W = ${m(tr.deposit)} × ${p(wc)}   —   no borrower ⇒ ω_churn only = ${m(tr.withdrawal)}`
+              }
             >
               Withdrawal_dep = D × [ρ_take × ω_with + (1 − ρ_take) × ω_churn]
             </Formula>
@@ -137,10 +176,16 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`RR = ${p(RR)}  →  Net deposits = ${m(k.totalDeposit)} × ${p(1 - RR)} = ${m(k.netDeposit)}`}>
               Inflows_t = D_new,t × (1 − RR) + Σ_k PMT_k,t
             </Formula>
-            <Formula live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}`}>
-              Outflows_t = Σ_k Commitment_k,t + Σ_k Withdrawal_k,t
+            <Formula
+              live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}  |  Σ Deposit profit = ${m(k.totalProfitPaid)}`}
+            >
+              Outflows_t = Σ_k Commitment_k,t + Σ_k Withdrawal_k,t + DepositProfit_t
             </Formula>
-            <Formula live={`Leverage = (${m(k.totalCommitment)} + ${m(k.totalWithdrawal)}) / ${m(k.netDeposit)} = ${p(k.leverage, 3)}×`}>
+            <Formula
+              live={`Leverage = (${m(k.totalCommitment)} + ${m(k.totalWithdrawal)}) / ${m(k.netDeposit)} = ${
+                Number.isFinite(k.leverage) ? `${p(k.leverage, 3)}×` : '∞ (net resources = 0)'
+              }`}
+            >
               NCF_t = Inflows_t − Outflows_t ;  CumLiq_t = CumLiq_(t−1) + NCF_t
             </Formula>
           </Step>
@@ -157,6 +202,105 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`Interbank cost ≈ ${m(k.interbankCost)}  (r_ib = ${p(config.interbankRate)}%)`}>
               Funding Cost = Σ_t max(0, −CumLiq_t) × r_ib / 12
             </Formula>
+          </Step>
+
+          <Step
+            letter="هـ"
+            className="lg:col-span-2"
+            title="صورت سود و زیان — حاشیهٔ خالص بانک در افق"
+            desc="سه جریان سود/هزینه شناسایی می‌شود: درآمد کارمزد یا سود اقساط وصول‌شده، سود پرداختی روی مانده سپرده‌ها در پایان هر ماه، و هزینهٔ تأمین کسری نقدینگی از بازار بین‌بانکی. نرخ سود سپرده صفر (پیش‌فرض) این لایه را خنثی نگه می‌دارد."
+          >
+            <Formula
+              live={`Profit_t = Bal_t × ${p(config.depositProfitRate / 1200, 6)}   →   Σ = ${m(k.totalProfitPaid)}`}
+            >
+              Deposit Profit_t = DepositBalance_t × r_dep / 12
+            </Formula>
+            <Formula live={`NII = ${m(k.totalIncomeInHorizon)} − ${m(k.totalProfitPaid)} = ${m(k.netInterestIncome)}`}>
+              Net Interest Income = Σ Fee/Profit Collected − Σ Deposit Profit
+            </Formula>
+            <Formula
+              live={`Margin = ${m(k.netInterestIncome)} − ${m(k.interbankCost)} = ${m(k.netMargin)}   (${
+                Number.isFinite(k.marginOnNetDeposit) ? `${p(k.marginOnNetDeposit * 100, 2)}% of net resources` : 'net resources = 0'
+              })`}
+            >
+              Net Margin = NII − Interbank Funding Cost
+            </Formula>
+          </Step>
+
+          <Step
+            letter="و"
+            title="سنجه‌های مقرراتی‌مانند — LCR، NSFR و شکاف سررسید"
+            desc="نسخهٔ آموزشی و قابل تنظیم از پوشش نقدینگی، تأمین مالی پایدار و میانگین وزنی عمر. ضرایب را کاربر تعیین می‌کند و این اعداد جایگزین تعاریف رسمی ناظر نیستند."
+          >
+            <Formula
+              live={
+                reg.minLcr === null
+                  ? 'no month had a stressed outflow'
+                  : `min LCR = ${fmtRaw(reg.minLcr, 1)}% at month ${toFa(reg.minLcrMonth ?? 0)}  ·  months < 100% = ${toFa(reg.monthsBelow100)}  ·  ω = ${fmtRaw(regulatory.stressRunoff, 1)}%`
+              }
+            >
+              LCR(t) = max(0, CumLiq_t) / (Outflow_t + ω × DepositBalance_t) × 100
+            </Formula>
+            <Formula
+              live={
+                reg.nsfr === null
+                  ? `NSFR undefined at month ${toFa(reg.nsfrMonth)} (required stable funding = 0)`
+                  : `NSFR(month ${toFa(reg.nsfrMonth)}) = ${m(reg.asf)} / ${m(reg.rsf)} = ${fmtRaw(reg.nsfr, 1)}%   (w = ${fmtRaw(regulatory.stableWeight, 0)}%, r = ${fmtRaw(regulatory.loanWeight, 0)}%)`
+              }
+            >
+              NSFR(m) = DepositBalance(m) × w / (LoanBook(m) × r) × 100
+            </Formula>
+            <Formula
+              live={
+                reg.maturityGap === null
+                  ? 'WAL undefined (no principal inflow or liability outflow)'
+                  : `WAL assets ${fmtRaw(reg.walAssets ?? 0, 2)} − WAL liabilities ${fmtRaw(reg.walLiabilities ?? 0, 2)} = ${fmtRaw(reg.maturityGap, 2)} months`
+              }
+            >
+              Gap = Σ t·Inflow(t)/Σ Inflow − Σ t·Outflow(t)/Σ Outflow
+            </Formula>
+          </Step>
+
+          <Step
+            letter="ز"
+            title="انتساب حفرهٔ نقدینگی به پله‌ها"
+            desc="حذف تحلیلی هر پله (بدون شبیه‌سازی مجدد): جریان‌های منتسب به آن پله از مسیر نقدینگی کم می‌شود. سود سپرده بر پایهٔ ماندهٔ هر پله توزیع می‌گردد."
+          >
+            <Formula
+              live={
+                worst
+                  ? `largest hole reduction by removing «${worst.name}»: Δhole = ${m(worst.holeDelta)}`
+                  : 'no tier events to attribute'
+              }
+            >
+              cum′_k(t) = cum(t) − Σ_j≤t ncf_k(j)
+            </Formula>
+            <Formula live={`base hole = ${m(attr.base.maxHole)}  ·  tiers attributed = ${toFa(attr.tiers.length)}`}>
+              Δhole_k = maxHole(without k) − maxHole(base)
+            </Formula>
+          </Step>
+
+          <Step
+            letter="ح"
+            title="آزمون مونت‌کارلو — توزیع ریسک به‌جای یک عدد"
+            desc="نرخ‌های رفتاری حول برآورد شما با توزیع نرمال و حجم منابع با توزیع لگ‌نرمال نمونه‌گیری می‌شوند. دانهٔ تصادفی قابل تنظیم است تا هر توزیع دقیقاً بازتولید شود."
+          >
+            <Formula live={`current point estimate: hole = ${m(k.maxHole)}, margin = ${m(k.netMargin)}, tipping = ${k.tippingPoint === null ? 'none' : `month ${toFa(k.tippingPoint)}`}`}>
+              ρ′ = clamp(ρ + ε·σ, 0, 100) , ε ~ N(0,1) , σ = intensity × 20pp
+            </Formula>
+            <Formula>D′ = D × exp(ε · intensity × 0.25) ; timing shock ~ round(ε · intensity × 1.5)</Formula>
+            <Formula>P(tipping) = share of runs with min CumLiq &lt; 0 ; VaR₉₅ = P95(max hole)</Formula>
+          </Step>
+
+          <Step
+            letter="ط"
+            title="بهینه‌یاب طراحی — جست‌وجوی مختصاتی روی اهرم‌ها"
+            desc="اهرم‌ها (مقیاس α، جابه‌جایی انتظار، جابه‌جایی بازپرداخت، کج‌کردن سهم) همیشه یک‌جا روی پله‌های جاری اعمال می‌شوند. موجه بودن بر مقدار هدف اولویت دارد."
+          >
+            <Formula live={`baseline hole = ${m(k.maxHole)}  ·  baseline margin = ${m(k.netMargin)}  ·  leverage = ${Number.isFinite(k.leverage) ? `${fmtRatio(k.leverage)}×` : '∞'}`}>
+              maximize Objective(levers) subject to the constraints you set
+            </Formula>
+            <Formula>levers ∈ {'{'}α-scale, ΔT_dep, ΔT_loan, tilt{'}'} ; feasible designs outrank every infeasible one</Formula>
           </Step>
         </div>
       )}

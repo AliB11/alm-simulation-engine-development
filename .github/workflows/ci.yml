@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    name: typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: single-file build stays offline
+        run: |
+          if grep -q "fonts.googleapis.com" dist/index.html; then
+            echo "production build still depends on Google Fonts" >&2
+            exit 1
+          fi
+          if ! grep -q "woff2" dist/index.html; then
+            echo "Vazirmatn was not inlined into dist/index.html" >&2
+            exit 1
+          fi

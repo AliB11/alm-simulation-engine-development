@@ -172,6 +172,21 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
               suffix="٪"
             />
           </Field>
+          <Field
+            label="نرخ سود پرداختی سپرده"
+            info="سود سالانه‌ای که بانک روی مانده سپرده‌ها می‌پردازد (سپردهٔ سرمایه‌گذاری / کوتاه‌مدت ماه‌شمار). در پایان هر ماه روی ماندهٔ پایان دوره به‌عنوان یک خروجی نقد واقعی ثبت می‌شود و هم بر حاشیهٔ سود و هم بر نقطهٔ واژگونی اثر می‌گذارد."
+            hint="r_dep — صفر یعنی خنثی (سپردهٔ قرض‌الحسنهٔ بدون سود)"
+          >
+            <NumField
+              value={config.depositProfitRate}
+              onChange={(v) => onChange({ depositProfitRate: v })}
+              min={0}
+              max={100}
+              step={0.5}
+              decimals={2}
+              suffix="٪"
+            />
+          </Field>
           <Toggle
             className="sm:col-span-2 xl:col-span-4"
             checked={config.releaseReserve}

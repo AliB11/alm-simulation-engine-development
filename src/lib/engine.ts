@@ -7,11 +7,14 @@
  *  ب) خروج همزمان (Double Liquidity Drain) در ماه سررسید T_dep:
  *     Commitment = D · α · ρ_take · ρ_app
  *     Withdrawal = D · [ρ_take · ω_with + (1 − ρ_take) · ω_churn]
+ *     — اگر پله‌ای هیچ وامی اعطا نکند (حداقل مانده برآورده نشده یا α_eff = ۰)،
+ *        وام‌گیرنده‌ای هم وجود ندارد؛ پس Withdrawal = D · ω_churn
  *  ج) ماتریس جریان وجوه:
  *     Inflows_t  = D_new,t · (1 − RR) + Σ PMT_k,t
  *     Outflows_t = Σ Commitment_k,t + Σ Withdrawal_k,t
  *     NCF_t = Inflows_t − Outflows_t ;  CumLiq_t = CumLiq_{t−1} + NCF_t
  *  د) Tipping Point = اولین t با CumLiq_t < 0 ؛ Max Hole = min(CumLiq_t)
+ *     Leverage = (Σ Commitment + Σ Withdrawal) / (D·(1−RR)) — اگر مخرج صفر و صورت مثبت باشد: ∞
  * ------------------------------------------------------------------ */
 
 import type {
@@ -32,33 +35,57 @@ import type {
 
 export const EPS = 1e-6;
 
+/** کران‌های ایمن موتور — فقط برای جلوگیری از سرریز/NaN، نه محدودسازی ورودی کاربر */
+export const MAX_RATE_PCT = 1000;
+export const MAX_MONEY = 1e18;
+export const MAX_MONTHS = 600;
+
 export function clamp(v: number, lo: number, hi: number): number {
   if (!Number.isFinite(v)) return lo;
   return Math.min(hi, Math.max(lo, v));
 }
 
+/**
+ * دروازه ورود اعداد خام به موتور: هر مقدار غیرعدد، NaN یا ±Infinity به `fallback`
+ * نگاشت می‌شود. بدون این لایه، یک فیلد خراب (مثلاً α = NaN) کل ماتریس نقدینگی و همه
+ * شاخص‌ها را NaN می‌کند و داشبورد به‌جای هشدار، وضعیت «پایدار» نشان می‌دهد.
+ */
+export function finite(v: unknown, fallback = 0): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** مانند finite ولی با محدودسازی به بازهٔ [lo, hi] و مقدار بازگشتی صریح */
+export function bounded(v: unknown, lo: number, hi: number, fallback: number): number {
+  return Math.min(hi, Math.max(lo, finite(v, fallback)));
+}
+
 export function globalRate(config: GlobalConfig): number {
-  return config.contractType === 'qard' ? config.qardFeeRate : config.murabahaRate;
+  const r = config.contractType === 'qard' ? config.qardFeeRate : config.murabahaRate;
+  return bounded(r, 0, MAX_RATE_PCT, 0);
 }
 
 export function tierRate(tier: Tier, config: GlobalConfig): number {
-  return tier.rateOverride !== null && tier.rateOverride !== undefined && Number.isFinite(tier.rateOverride)
-    ? tier.rateOverride
-    : globalRate(config);
+  const o = tier.rateOverride;
+  return o === null || o === undefined || !Number.isFinite(o) ? globalRate(config) : bounded(o, 0, MAX_RATE_PCT, 0);
 }
 
 /* ---------------------------- الف) PMT ---------------------------- */
 
 export function calcPmt(contract: ContractType, loan: number, months: number, annualRatePct: number): number {
-  if (!(loan > 0) || !(months > 0)) return 0;
-  const r = annualRatePct / 100;
+  const L = finite(loan, 0);
+  const n = finite(months, 0);
+  if (!(L > 0) || !(n > 0)) return 0;
+  const r = finite(annualRatePct, 0) / 100;
   if (contract === 'qard') {
-    return (loan / months) * (1 + (r * months) / 12);
+    return (L / n) * (1 + (r * n) / 12);
   }
   const rm = r / 12;
-  if (Math.abs(rm) < 1e-12) return loan / months;
-  const f = Math.pow(1 + rm, months);
-  return (loan * rm * f) / (f - 1);
+  if (Math.abs(rm) < 1e-12) return L / n;
+  const f = Math.pow(1 + rm, n);
+  if (!Number.isFinite(f)) return L * rm; // حد f → ∞ (نرخ×مدت بسیار بزرگ): PMT ≈ L·r_m
+  if (f === 1) return L / n;
+  return (L * rm * f) / (f - 1);
 }
 
 export interface AmortRow {
@@ -71,16 +98,23 @@ export interface AmortRow {
 
 /** جدول استهلاک کامل (تفکیک اصل و کارمزد/سود هر قسط) */
 export function amortization(contract: ContractType, loan: number, months: number, annualRatePct: number): AmortRow[] {
-  const n = Math.max(0, Math.round(months));
-  const pay = calcPmt(contract, loan, n, annualRatePct);
-  const rm = annualRatePct / 1200;
+  const L = finite(loan, 0);
+  const n = Math.max(0, Math.round(finite(months, 0)));
+  const rate = finite(annualRatePct, 0);
+  const pay = calcPmt(contract, L, n, rate);
+  const rm = rate / 1200;
   const out: AmortRow[] = [];
-  let bal = loan;
+  let bal = L;
   for (let j = 1; j <= n; j++) {
     let principal: number;
     let income: number;
-    if (contract === 'qard' || Math.abs(rm) < 1e-12) {
-      principal = loan / n;
+    if (j === n) {
+      // قسط پایانی دقیقاً به اندازه مانده است تا Σ اصل = L شود
+      // (حذف خطای تجمعی ممیز شناور که مانده تسهیلات را از صفر دور می‌کرد)
+      principal = bal;
+      income = pay - principal;
+    } else if (contract === 'qard' || Math.abs(rm) < 1e-12) {
+      principal = L / n;
       income = pay - principal;
     } else {
       income = bal * rm;
@@ -95,7 +129,7 @@ export function amortization(contract: ContractType, loan: number, months: numbe
 /* ------------------- ضریب مؤثر با اعمال سقف فردی ------------------- */
 
 export function representativeBalance(tier: Tier, avgTicket: number): number {
-  return Math.max(avgTicket > 0 ? avgTicket : 0, tier.minBalance > 0 ? tier.minBalance : 0);
+  return Math.max(bounded(avgTicket, 0, MAX_MONEY, 0), bounded(tier.minBalance, 0, MAX_MONEY, 0));
 }
 
 /**
@@ -107,10 +141,11 @@ export function effectiveAlpha(
   loanCap: number,
   avgTicket: number,
 ): { alpha: number; binding: boolean; repBalance: number } {
-  const a = Math.max(0, tier.alpha) / 100;
+  const a = Math.max(0, finite(tier.alpha, 0)) / 100;
+  const cap = bounded(loanCap, 0, MAX_MONEY, 0);
   const rep = representativeBalance(tier, avgTicket);
-  if (loanCap > 0 && rep > 0 && loanCap / rep < a) {
-    return { alpha: loanCap / rep, binding: true, repBalance: rep };
+  if (cap > 0 && rep > 0 && cap / rep < a) {
+    return { alpha: cap / rep, binding: true, repBalance: rep };
   }
   return { alpha: a, binding: false, repBalance: rep };
 }
@@ -126,21 +161,45 @@ export function withdrawalFactor(b: Behavior): number {
   return take * (clamp(b.runoffRate, 0, 100) / 100) + (1 - take) * (clamp(b.churnRate, 0, 100) / 100);
 }
 
+/**
+ * ضریب خروج سپرده در سطح پله.
+ * اگر پله هیچ وامی اعطا نکند (حداقل مانده پله برآورده نشده یا α_eff = ۰)، عملاً هیچ
+ * «وام‌گیرنده»‌ای در آن پله وجود ندارد؛ پس همه سپرده‌گذاران انصراف‌دهنده فرض می‌شوند و
+ * فقط ω_churn اعمال می‌گردد. در غیر این صورت همان فرمول پایه withdrawalFactor است.
+ */
+export function tierWithdrawalFactor(b: Behavior, lends: boolean): number {
+  return lends ? withdrawalFactor(b) : clamp(b.churnRate, 0, 100) / 100;
+}
+
 /* ------------------------ ساخت ویژه‌های ورودی ------------------------ */
 
+/** آخرین ماه قابل ثبت در ماتریس (t = 0 … lastMonth) */
+export function lastMatrixMonth(horizon: number): number {
+  return Math.round(bounded(horizon, 0, MAX_MONTHS, 0));
+}
+
+/**
+ * تعداد ویژه‌های حالت «توزیع یکنواخت» — مرجع مشترک موتور و UI تا پیش‌نمایش ریالی
+ * جدول زمان‌بندی هرگز از ماتریس واقعی واگرا نشود.
+ */
+export function uniformVintageCount(schedule: DepositSchedule, horizon: number): number {
+  return Math.round(bounded(schedule.uniformMonths, 1, lastMatrixMonth(horizon) + 1, 1));
+}
+
 export function buildVintages(total: number, schedule: DepositSchedule, horizon: number): Vintage[] {
-  if (!(total > 0) || !Number.isFinite(total)) return [];
-  const lastMonth = Math.max(0, Math.round(clamp(horizon, 0, 600)));
-  if (schedule.mode === 'lump') return [{ month: 0, amount: total }];
+  const amount = finite(total, 0);
+  if (!(amount > 0)) return [];
+  const lastMonth = lastMatrixMonth(horizon);
+  if (schedule.mode === 'lump') return [{ month: 0, amount }];
   if (schedule.mode === 'uniform') {
-    const n = Math.round(clamp(schedule.uniformMonths, 1, lastMonth + 1));
-    return Array.from({ length: n }, (_, i) => ({ month: i, amount: total / n }));
+    const n = uniformVintageCount(schedule, horizon);
+    return Array.from({ length: n }, (_, i) => ({ month: i, amount: amount / n }));
   }
 
   // Keep only valid in-horizon entries before normalization so dropped/invalid
   // entries cannot silently reduce the modeled deposit total.
   const valid = (Array.isArray(schedule.custom) ? schedule.custom : []).filter(
-    (v) => Number.isFinite(v.month) && Number.isFinite(v.share) && v.share > 0,
+    (v) => !!v && Number.isFinite(v.month) && Number.isFinite(v.share) && v.share > 0,
   );
   const byMonth = new Map<number, number>();
   for (const v of valid) {
@@ -152,7 +211,7 @@ export function buildVintages(total: number, schedule: DepositSchedule, horizon:
   if (!(sum > 0)) return [];
   return [...byMonth.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([month, share]) => ({ month, amount: (total * share) / sum }));
+    .map(([month, share]) => ({ month, amount: (amount * share) / sum }));
 }
 
 /* ----------------------- موتور ماتریس نقدینگی ----------------------- */
@@ -164,6 +223,7 @@ const EVENT_ORDER: Record<EventType, number> = {
   pmt: 3,
   loan: 4,
   withdrawal: 5,
+  profit: 6,
 };
 
 function emptyRow(t: number): MonthRow {
@@ -179,32 +239,39 @@ function emptyRow(t: number): MonthRow {
     inflow: 0,
     loanOut: 0,
     withdrawalOut: 0,
+    profitPaid: 0,
+    fundingCost: 0,
     outflow: 0,
     ncf: 0,
     cum: 0,
     depositBalance: 0,
     loanBook: 0,
+    cumMargin: 0,
     events: [],
   };
 }
 
 export function simulate(input: SimInput, withDetails = true): SimResult {
   const { config, tiers, behavior, schedule } = input;
-  const H = Math.round(clamp(config.horizon, 1, 600));
-  const RR = clamp(config.reserveRatio, 0, 100) / 100;
-  const take = clamp(behavior.takeUpRate, 0, 100) / 100;
-  const app = clamp(behavior.approvalRate, 0, 100) / 100;
-  const wFactor = withdrawalFactor(behavior);
-  const collectRatio = 1 - clamp(config.defaultRate, 0, 100) / 100;
-  const contract = config.contractType;
+  const safeTiers = Array.isArray(tiers) ? tiers.filter((t) => !!t) : [];
+  const H = Math.round(bounded(config.horizon, 1, MAX_MONTHS, 60));
+  const RR = bounded(config.reserveRatio, 0, 100, 0) / 100;
+  const take = bounded(behavior.takeUpRate, 0, 100, 0) / 100;
+  const app = bounded(behavior.approvalRate, 0, 100, 0) / 100;
+  const collectRatio = 1 - bounded(config.defaultRate, 0, 100, 0) / 100;
+  const loanCap = bounded(config.loanCap, 0, MAX_MONEY, 0);
+  const avgTicket = bounded(behavior.avgTicket, 0, MAX_MONEY, 0);
+  const initLiq = bounded(config.initialLiquidity, -MAX_MONEY, MAX_MONEY, 0);
+  const totalDepositInput = bounded(behavior.totalDeposit, 0, MAX_MONEY, 0);
+  const contract = config.contractType === 'murabaha' ? 'murabaha' : 'qard';
 
   const rows: MonthRow[] = Array.from({ length: H + 1 }, (_, t) => emptyRow(t));
   const maps: Map<string, FlowEvent>[] | null = withDetails ? rows.map(() => new Map()) : null;
   const depDelta = new Float64Array(H + 1);
   const bookDelta = new Float64Array(H + 1);
 
-  const vintages = buildVintages(behavior.totalDeposit, schedule, H);
-  const allocSum = tiers.reduce((s, t) => s + Math.max(0, t.allocation || 0), 0);
+  const vintages = buildVintages(totalDepositInput, schedule, H);
+  const allocSum = safeTiers.reduce((s, t) => s + Math.max(0, finite(t.allocation, 0)), 0);
 
   let pmtBeyond = 0;
   let commitmentsBeyond = 0;
@@ -260,6 +327,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     allocation: 0,
     rateOverride: null,
   };
+  /* منبع رویدادهای سطح پرتفوی (سود پرداختی به کل سپرده‌ها) */
+  const depositPool: Tier = { ...unallocated, id: '__deposit_pool', name: 'سپرده‌گذاران (کل منابع)' };
   for (const v of vintages) {
     const r0 = rows[v.month];
     r0.depositGross += v.amount;
@@ -272,13 +341,16 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     }
   }
 
-  const tierResults: TierResult[] = tiers.map((tier, idx) => {
-    const share = allocSum > 0 ? Math.max(0, tier.allocation || 0) / allocSum : 0;
-    const { alpha, binding, repBalance } = effectiveAlpha(tier, config.loanCap, behavior.avgTicket);
-    const eligible = Number.isFinite(behavior.avgTicket) && behavior.avgTicket >= Math.max(0, tier.minBalance);
+  const tierResults: TierResult[] = safeTiers.map((tier, idx) => {
+    const share = allocSum > 0 ? Math.max(0, finite(tier.allocation, 0)) / allocSum : 0;
+    const { alpha, binding, repBalance } = effectiveAlpha(tier, loanCap, avgTicket);
+    const minBalance = bounded(tier.minBalance, 0, MAX_MONEY, 0);
+    const eligible = avgTicket >= minBalance; // فقط سپرده‌گذار واجد حداقل مانده امکان دریافت وام دارد
+    const lends = eligible && alpha > 0; // آیا این پله اساساً تسهیلاتی اعطا می‌کند؟
+    const wTier = tierWithdrawalFactor(behavior, lends);
     const rate = tierRate(tier, config);
-    const T = Math.max(1, Math.round(tier.tLoan));
-    const tDep = Math.max(0, Math.round(tier.tDep));
+    const T = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
+    const tDep = Math.round(bounded(tier.tDep, 0, MAX_MONTHS, 1));
     const unit = amortization(contract, 1, T, rate); // جدول استهلاک واحد (L = 1)
     const unitPay = unit.length ? unit[0].payment : 0;
 
@@ -290,6 +362,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
       alphaEff: alpha,
       capBinding: binding,
       repBalance,
+      eligible,
+      lends,
       rate,
       commitment: 0,
       withdrawal: 0,
@@ -307,8 +381,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
       const D = v.amount * share;
       if (!(D > 0)) continue;
 
-      const L = eligible ? D * alpha * take * app : 0; // فقط سپرده‌گذار واجد حداقل مانده امکان دریافت وام دارد
-      const W = D * wFactor; // خروج اصل سپرده
+      const L = lends ? D * alpha * take * app : 0; // اگر پله وامی نمی‌دهد، تعهدی هم شکل نمی‌گیرد
+      const W = D * wTier; // خروج اصل سپرده
       const pay = unitPay * L;
 
       res.deposit += D;
@@ -317,7 +391,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
       res.monthlyPmt += pay;
       res.totalRepay += pay * T;
       res.totalIncome += pay * T - L;
-      if (repBalance > 0) res.borrowers += (D / repBalance) * take * app;
+      // برآورد تعداد وام‌گیرنده فقط وقتی معنا دارد که پله واقعاً اعطا کند و مانده مبنا معلوم باشد
+      if (lends && repBalance > 0 && take > 0 && app > 0) res.borrowers += (D / repBalance) * take * app;
 
       // ۱) ورود سپرده (ماه ورود ویژه) — مقادیر ماتریس به صورت تجمیعی پیش‌تر ثبت شده‌اند
       const t0 = v.month;
@@ -369,20 +444,26 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   });
 
   /* ---- تجمیع ماتریس و محاسبه NCF / CumLiq ---- */
-  let cum = Number.isFinite(config.initialLiquidity) ? config.initialLiquidity : 0;
+  // سود پرداختی به سپرده‌گذاران: در پایان هر ماه روی ماندهٔ پایان دورهٔ همان ماه.
+  // نرخ صفر (پیش‌فرض) این جریان را کاملاً خنثی می‌کند.
+  const depMonthly = bounded(config.depositProfitRate, 0, MAX_RATE_PCT, 0) / 1200;
+  const ibMonthly = bounded(config.interbankRate, 0, MAX_RATE_PCT, 0) / 1200;
+  let cum = initLiq;
   let dep = 0;
   let book = 0;
   for (const r of rows) {
-    r.inflow = r.depositNet + r.pmtInflow + r.reserveRelease;
-    r.outflow = r.loanOut + r.withdrawalOut;
-    r.ncf = r.inflow - r.outflow;
-    cum += r.ncf;
-    r.cum = cum;
     dep += depDelta[r.t];
     book += bookDelta[r.t];
     r.depositBalance = Math.max(0, dep);
     r.loanBook = Math.max(0, book);
+    r.profitPaid = r.depositBalance * depMonthly;
+    r.inflow = r.depositNet + r.pmtInflow + r.reserveRelease;
+    r.outflow = r.loanOut + r.withdrawalOut + r.profitPaid;
+    r.ncf = r.inflow - r.outflow;
+    cum += r.ncf;
+    r.cum = cum;
     if (maps) {
+      push(r.t, 'profit', depositPool, -1, r.profitPaid, r.t);
       r.events = Array.from(maps[r.t].values()).sort(
         (a, b) => EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.tierIndex - b.tierIndex,
       );
@@ -405,25 +486,38 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   let peakOutflowMonth = 0;
   let totalPmtInHorizon = 0;
   let totalIncomeInHorizon = 0;
-  const ibMonthly = Math.max(0, config.interbankRate) / 1200;
+  let totalProfitPaid = 0;
+  let cumMargin = 0;
 
   for (const r of rows) {
     if (r.cum < minCum - EPS) {
       minCum = r.cum;
       minCumMonth = r.t;
     }
+    // هزینهٔ تأمین کسری در همان ماهی که کسری وجود دارد شناسایی می‌شود
+    const ibCost = r.cum < -EPS ? -r.cum * ibMonthly : 0;
     if (r.cum < -EPS) {
       deficitMonths++;
       if (tippingPoint === null) tippingPoint = r.t;
-      interbankCost += -r.cum * ibMonthly;
     }
+    interbankCost += ibCost;
+    r.fundingCost = ibCost;
     if (r.outflow > peakOutflow + EPS) {
       peakOutflow = r.outflow;
       peakOutflowMonth = r.t;
     }
     totalPmtInHorizon += r.pmtInflow;
     totalIncomeInHorizon += r.incomeIn;
+    totalProfitPaid += r.profitPaid;
+    // حاشیهٔ تجمعی بانک: درآمد کارمزد/سود − سود پرداختی سپرده − هزینهٔ تأمین کسری
+    cumMargin += r.incomeIn - r.profitPaid - ibCost;
+    r.cumMargin = cumMargin;
   }
+
+  /* اهرم خروج: اگر منابع خالص صفر باشد (مثلاً RR = ۱۰۰٪) و همچنان خروجی وجود داشته
+     باشد، اهرم بی‌نهایت است — نمایش «۰×» در این حالت به‌اشتباه ایمن به نظر می‌رسد. */
+  const grossOutflow = totalCommitment + totalWithdrawal;
+  const leverage = netDeposit > EPS ? grossOutflow / netDeposit : grossOutflow > EPS ? Infinity : 0;
 
   let recoveryMonth: number | null = null;
   if (tippingPoint !== null) {
@@ -441,7 +535,7 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     reserveHeld: totalDeposit * RR,
     totalCommitment,
     totalWithdrawal,
-    leverage: netDeposit > 0 ? (totalCommitment + totalWithdrawal) / netDeposit : 0,
+    leverage,
     minCum: Number.isFinite(minCum) ? minCum : 0,
     minCumMonth,
     maxHole: minCum < -EPS ? -minCum : 0,
@@ -457,6 +551,10 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     borrowers,
     peakOutflow,
     peakOutflowMonth,
+    totalProfitPaid,
+    netInterestIncome: totalIncomeInHorizon - totalProfitPaid,
+    netMargin: cumMargin,
+    marginOnNetDeposit: netDeposit > EPS ? cumMargin / netDeposit : cumMargin > EPS ? Infinity : 0,
   };
 
   return { rows, tiers: tierResults, kpis, vintages };
@@ -501,19 +599,25 @@ export interface SampleRow {
 }
 
 export function sampleComparison(tiers: Tier[], config: GlobalConfig, sample: number): SampleRow[] {
-  return tiers.map((tier, index) => {
+  const S = bounded(sample, 0, MAX_MONEY, 0);
+  const cap = bounded(config.loanCap, 0, MAX_MONEY, 0);
+  const oppRate = bounded(config.opportunityRate, 0, MAX_RATE_PCT, 0);
+  const contract = config.contractType === 'murabaha' ? 'murabaha' : 'qard';
+  return (Array.isArray(tiers) ? tiers.filter((t) => !!t) : []).map((tier, index) => {
     const rate = tierRate(tier, config);
-    const T = Math.max(1, Math.round(tier.tLoan));
-    const eligible = sample > 0 && sample >= (tier.minBalance || 0);
-    const rawLoan = eligible ? (sample * Math.max(0, tier.alpha)) / 100 : 0;
-    const capped = config.loanCap > 0 && rawLoan > config.loanCap;
-    const loan = capped ? config.loanCap : rawLoan;
-    const pmt = calcPmt(config.contractType, loan, T, rate);
+    const T = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
+    const tDep = bounded(tier.tDep, 0, MAX_MONTHS, 0);
+    const minBalance = bounded(tier.minBalance, 0, MAX_MONEY, 0);
+    const eligible = S > 0 && S >= minBalance;
+    const rawLoan = eligible ? (S * Math.max(0, finite(tier.alpha, 0))) / 100 : 0;
+    const capped = cap > 0 && rawLoan > cap;
+    const loan = capped ? cap : rawLoan;
+    const pmt = calcPmt(contract, loan, T, rate);
     const totalRepay = pmt * T;
     const totalFee = totalRepay - loan;
     const roi = loan > 0 ? totalFee / loan : 0;
     const i = solveMonthlyRate(loan, pmt, T);
-    const oppCost = eligible ? sample * (Math.pow(1 + Math.max(0, config.opportunityRate) / 1200, tier.tDep) - 1) : 0;
+    const oppCost = eligible ? S * (Math.pow(1 + oppRate / 1200, tDep) - 1) : 0;
     const netLoan = loan - oppCost;
     const ic = netLoan > 0 ? solveMonthlyRate(netLoan, pmt, T) : null;
     return {
@@ -545,9 +649,10 @@ export type SensVar =
   | 'churnRate'
   | 'reserveRatio'
   | 'alphaScale'
-  | 'rate';
+  | 'rate'
+  | 'profitRate';
 
-export type SensMetric = 'maxHole' | 'tipping' | 'endCum' | 'leverage';
+export type SensMetric = 'maxHole' | 'tipping' | 'endCum' | 'leverage' | 'margin';
 
 export interface SensVarDef {
   key: SensVar;
@@ -607,29 +712,44 @@ export const SENS_VARS: SensVarDef[] = [
     values: (i) => (i.config.contractType === 'qard' ? [0, 2, 4, 6, 8, 10, 12] : [5, 9, 13, 17, 21, 25, 29]),
     current: (i) => globalRate(i.config),
   },
+  {
+    key: 'profitRate',
+    label: 'سود پرداختی سپرده',
+    symbol: 'r_dep',
+    values: () => [0, 5, 10, 15, 20.5, 25, 30],
+    current: (i) => i.config.depositProfitRate,
+  },
 ];
 
 export function applySensitivity(input: SimInput, key: SensVar, value: number): SimInput {
+  const tiers = Array.isArray(input.tiers) ? input.tiers : [];
   switch (key) {
     case 'takeUpRate':
     case 'approvalRate':
     case 'runoffRate':
     case 'churnRate':
-      return { ...input, behavior: { ...input.behavior, [key]: value } };
+      return { ...input, behavior: { ...input.behavior, [key]: bounded(value, 0, 100, 0) } };
     case 'reserveRatio':
-      return { ...input, config: { ...input.config, reserveRatio: value } };
+      return { ...input, config: { ...input.config, reserveRatio: bounded(value, 0, 100, 0) } };
+    case 'profitRate':
+      return { ...input, config: { ...input.config, depositProfitRate: bounded(value, 0, 100, 0) } };
     case 'alphaScale':
-      return { ...input, tiers: input.tiers.map((t) => ({ ...t, alpha: (t.alpha * value) / 100 })) };
-    case 'rate': {
-      const delta = value - globalRate(input.config);
       return {
         ...input,
-        config: { ...input.config, qardFeeRate: value, murabahaRate: value },
+        tiers: tiers.map((t) => ({ ...t, alpha: (Math.max(0, finite(t.alpha, 0)) * bounded(value, 0, 1e6, 100)) / 100 })),
+      };
+    case 'rate': {
+      const r = bounded(value, 0, MAX_RATE_PCT, 0);
+      const delta = r - globalRate(input.config);
+      return {
+        ...input,
+        config: { ...input.config, qardFeeRate: r, murabahaRate: r },
         // Apply the same parallel rate shock to tier-specific prices. At the
         // current global rate (delta = 0), the original scenario is preserved.
-        tiers: input.tiers.map((t) => ({
+        tiers: tiers.map((t) => ({
           ...t,
-          rateOverride: t.rateOverride === null ? null : Math.max(0, t.rateOverride + delta),
+          rateOverride:
+            t.rateOverride === null || t.rateOverride === undefined ? null : Math.max(0, finite(t.rateOverride, 0) + delta),
         })),
       };
     }
@@ -639,7 +759,7 @@ export function applySensitivity(input: SimInput, key: SensVar, value: number): 
 }
 
 function withCurrent(values: number[], cur: number): number[] {
-  const c = Math.round(cur * 100) / 100;
+  const c = Math.round(finite(cur, values[0] ?? 0) * 100) / 100;
   if (values.includes(c)) return values;
   let best = 0;
   values.forEach((v, i) => {
@@ -661,12 +781,15 @@ export interface SensitivityGrid {
 export function runSensitivity(input: SimInput, xKey: SensVar, yKey: SensVar): SensitivityGrid {
   const xDef = SENS_VARS.find((v) => v.key === xKey) ?? SENS_VARS[0];
   const yDef = SENS_VARS.find((v) => v.key === yKey) ?? SENS_VARS[1];
-  const curX = Math.round(xDef.current(input) * 100) / 100;
-  const curY = Math.round(yDef.current(input) * 100) / 100;
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const curX = round2(finite(xDef.current(input), 0));
+  const curY = round2(finite(yDef.current(input), 0));
   const xs = withCurrent(xDef.values(input), curX);
   const ys = withCurrent(yDef.values(input), curY);
   const cells = ys.map((yv) =>
     xs.map((xv) => simulate(applySensitivity(applySensitivity(input, yDef.key, yv), xDef.key, xv), false).kpis),
   );
-  return { xs, ys, cells, xi: xs.indexOf(curX), yi: ys.indexOf(curY) };
+  const xi = xs.indexOf(curX);
+  const yi = ys.indexOf(curY);
+  return { xs, ys, cells, xi: xi < 0 ? 0 : xi, yi: yi < 0 ? 0 : yi };
 }
