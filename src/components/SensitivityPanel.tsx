@@ -124,7 +124,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
         title="آزمون حساسیت و بحران دوبعدی (Stress Matrix)"
         subtitle={`هر خانه یک شبیه‌سازی کامل ${toFa(H)} ماهه با ترکیب متفاوتی از دو متغیر ریسک است؛ خانه با قاب، سناریوی جاری را نشان می‌دهد`}
         actions={
-          <Segmented size="sm" value={metric} onChange={setMetric} options={METRICS} />
+          <Segmented size="sm" className="flex-wrap" value={metric} onChange={setMetric} options={METRICS} />
         }
       />
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3 text-[12px] text-slate-600 dark:border-slate-800 dark:text-slate-300">
