@@ -137,6 +137,10 @@ export interface TierResult {
   alphaEff: number;
   capBinding: boolean;
   repBalance: number;
+  /** آیا میانگین سپرده مشتری به حداقل مانده این پله می‌رسد؟ */
+  eligible: boolean;
+  /** آیا این پله اساساً تسهیلاتی اعطا می‌کند؟ (واجد شرایط و α_eff > ۰) */
+  lends: boolean;
   rate: number;
   commitment: number;
   withdrawal: number;

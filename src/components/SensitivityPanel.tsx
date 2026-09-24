@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlaskConical, Grid3x3 } from 'lucide-react';
 import type { SimInput, SimKpis } from '../types';
 import { runSensitivity, SENS_VARS, type SensMetric, type SensVar } from '../lib/engine';
-import { axisUnit, fmtNumber, fmtRaw, toFa } from '../lib/format';
+import { axisUnit, fmtNumber, fmtRatio, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
 import { Badge, Card, CardHeader, Segmented } from './ui';
 import { cn } from '../utils/cn';
@@ -64,10 +64,13 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
 
   const values = grid.cells.map((row) => row.map((k) => metricValue(k, metric)));
   const flat = values.flat().filter((v): v is number => v !== null);
-  const maxAbs = Math.max(1e-9, ...flat.map((v) => Math.abs(v)));
-  const maxPos = Math.max(1e-9, ...flat.filter((v) => v > 0));
-  const maxNeg = Math.max(1e-9, ...flat.filter((v) => v < 0).map((v) => -v));
-  const maxLev = Math.max(1.0001, ...flat);
+  // مقیاس رنگ فقط از مقادیر متناهی ساخته می‌شود تا یک خانهٔ ∞ (اهرم با مخرج صفر)
+  // بقیه خانه‌ها را بی‌رنگ نکند.
+  const fin = flat.filter((v) => Number.isFinite(v));
+  const maxAbs = Math.max(1e-9, ...fin.map((v) => Math.abs(v)));
+  const maxPos = Math.max(1e-9, ...fin.filter((v) => v > 0));
+  const maxNeg = Math.max(1e-9, ...fin.filter((v) => v < 0).map((v) => -v));
+  const maxLev = Math.max(1.0001, ...fin);
   const moneyUnit = axisUnit(maxAbs * factor);
 
   const cellStyle = (v: number | null): { bg: string; fg: string } => {
@@ -75,13 +78,17 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
     const green = (i: number) => ({ bg: `rgba(16,185,129,${0.1 + 0.55 * i})`, fg: i > 0.6 ? '#fff' : '' });
     switch (metric) {
       case 'maxHole':
-        return v === null || v <= 1e-6 ? green(0.5) : red(Math.min(1, v / maxAbs));
+        if (v === null || v <= 1e-6) return green(0.5);
+        return Number.isFinite(v) ? red(Math.min(1, v / maxAbs)) : red(1);
       case 'tipping':
         return v === null ? green(0.5) : red(Math.min(1, 1 - v / Math.max(1, H)));
       case 'endCum':
-        return v === null ? green(0) : v < 0 ? red(Math.min(1, -v / maxNeg)) : green(Math.min(1, v / maxPos));
+        if (v === null || !Number.isFinite(v)) return green(0);
+        return v < 0 ? red(Math.min(1, -v / maxNeg)) : green(Math.min(1, v / maxPos));
       case 'leverage':
-        return v === null ? green(0) : v > 1 ? red(Math.min(1, (v - 1) / (maxLev - 1))) : green(Math.min(1, 1 - v));
+        if (v === null) return green(0);
+        if (!Number.isFinite(v)) return red(1);
+        return v > 1 ? red(Math.min(1, (v - 1) / (maxLev - 1))) : green(Math.min(1, 1 - v));
     }
   };
 
@@ -94,7 +101,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
       case 'endCum':
         return v === null ? '—' : fmtNumber((v * factor) / moneyUnit.div, 1);
       case 'leverage':
-        return v === null ? '—' : `${fmtNumber(v, 2, true)}×`;
+        return v === null ? '—' : `${fmtRatio(v)}×`;
     }
   };
 
@@ -174,7 +181,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
                   return (
                     <td
                       key={xi}
-                      title={`واژگونی: ${k.tippingPoint === null ? 'ندارد' : 'ماه ' + toFa(k.tippingPoint)} | اهرم: ${fmtRaw(k.leverage, 2)}×`}
+                      title={`واژگونی: ${k.tippingPoint === null ? 'ندارد' : 'ماه ' + toFa(k.tippingPoint)} | اهرم: ${fmtRatio(k.leverage)}×`}
                       className={cn(
                         'h-12 rounded-lg text-center font-bold tabular-nums transition',
                         current && 'ring-[3px] ring-indigo-600 ring-offset-2 ring-offset-white dark:ring-indigo-400 dark:ring-offset-slate-900',

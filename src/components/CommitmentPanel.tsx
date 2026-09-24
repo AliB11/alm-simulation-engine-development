@@ -1,8 +1,8 @@
 import { CalendarClock, Plus, Trash, TrendingDown, UserCheck, Users, Wallet, LogOut } from 'lucide-react';
-import type { Behavior, DepositSchedule, GlobalConfig, SimResult, Vintage } from '../types';
+import type { Behavior, CustomVintage, DepositSchedule, GlobalConfig, SimResult, Vintage } from '../types';
 import { fmtCompact, fmtPct, toFa } from '../lib/format';
 import { uid } from '../lib/presets';
-import { commitmentFactor, withdrawalFactor } from '../lib/engine';
+import { commitmentFactor, uniformVintageCount, withdrawalFactor } from '../lib/engine';
 import { useDisplay } from '../context/display';
 import { Badge, Button, Card, CardHeader, Field, Money, NumField, Segmented, SliderField } from './ui';
 import { KpiBoard, TierCommitmentTable } from './KpiBoard';
@@ -52,7 +52,11 @@ function ScheduleEditor({
   vintages: Vintage[];
   total: number;
 }) {
-  const sum = schedule.custom.reduce((s, v) => s + Math.max(0, v.share), 0);
+  const inHorizon = (v: CustomVintage) => Math.round(v.month) >= 0 && Math.round(v.month) <= horizon;
+  // موتور فقط ویژه‌های درون‌افق را نرمال می‌کند؛ پیش‌نمایش ریالی هم باید دقیقاً همان
+  // مخرج را استفاده کند، وگرنه ارقام جدول با ماتریس نقدینگی نمی‌خواند.
+  const sum = schedule.custom.reduce((s, v) => s + (inHorizon(v) ? Math.max(0, v.share) : 0), 0);
+  const dropped = schedule.custom.filter((v) => !inHorizon(v)).length;
   const updateV = (id: string, patch: Partial<{ month: number; share: number }>) =>
     onChange({ ...schedule, custom: schedule.custom.map((v) => (v.id === id ? { ...v, ...patch } : v)) });
   const removeV = (id: string) => onChange({ ...schedule, custom: schedule.custom.filter((v) => v.id !== id) });
@@ -63,7 +67,7 @@ function ScheduleEditor({
       custom: [...schedule.custom, { id: uid(), month: Math.min(horizon, last + 1), share: Math.max(0, Math.round((100 - sum) * 10) / 10) || 10 }],
     });
   };
-  const n = Math.round(Math.min(horizon + 1, Math.max(1, schedule.uniformMonths)));
+  const n = uniformVintageCount(schedule, horizon);
 
   return (
     <div className="space-y-3 rounded-xl border border-slate-200/80 p-3.5 dark:border-slate-800">
@@ -113,49 +117,64 @@ function ScheduleEditor({
       {schedule.mode === 'custom' && (
         <div className="space-y-2">
           {schedule.custom.length === 0 && <p className="text-[11px] text-slate-400">هیچ ویژه‌ای ثبت نشده است.</p>}
-          {schedule.custom.map((v) => (
-            <div key={v.id} className="flex flex-wrap items-center gap-2 text-[12px] text-slate-600 dark:text-slate-300">
-              <span>ماه</span>
-              <NumField
-                size="sm"
-                value={v.month}
-                min={0}
-                max={horizon}
-                onChange={(m) => updateV(v.id, { month: Math.round(m) })}
-                className="w-[64px]"
-              />
-              <span>سهم</span>
-              <NumField
-                size="sm"
-                value={v.share}
-                min={0}
-                max={100}
-                decimals={1}
-                onChange={(s) => updateV(v.id, { share: s })}
-                suffix="٪"
-                className="w-[88px]"
-              />
-              <span className="flex-1 text-left text-[11px] text-slate-500 dark:text-slate-400">
-                <Money compact value={sum > 0 ? (total * Math.max(0, v.share)) / sum : 0} />
-              </span>
-              <button
-                type="button"
-                title="حذف ویژه"
-                onClick={() => removeV(v.id)}
-                className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"
+          {schedule.custom.map((v) => {
+            const out = !inHorizon(v);
+            return (
+              <div
+                key={v.id}
+                className={
+                  'flex flex-wrap items-center gap-2 text-[12px] text-slate-600 dark:text-slate-300' +
+                  (out ? ' opacity-60' : '')
+                }
               >
-                <Trash className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+                <span>ماه</span>
+                <NumField
+                  size="sm"
+                  value={v.month}
+                  min={0}
+                  max={horizon}
+                  onChange={(m) => updateV(v.id, { month: Math.round(m) })}
+                  className="w-[64px]"
+                />
+                <span>سهم</span>
+                <NumField
+                  size="sm"
+                  value={v.share}
+                  min={0}
+                  max={100}
+                  decimals={1}
+                  onChange={(s) => updateV(v.id, { share: s })}
+                  suffix="٪"
+                  className="w-[88px]"
+                />
+                <span className="flex-1 text-left text-[11px] text-slate-500 dark:text-slate-400">
+                  {out ? (
+                    <Badge tone="amber">خارج از افق — در محاسبه لحاظ نمی‌شود</Badge>
+                  ) : (
+                    <Money compact value={sum > 0 ? (total * Math.max(0, v.share)) / sum : 0} />
+                  )}
+                </span>
+                <button
+                  type="button"
+                  title="حذف ویژه"
+                  onClick={() => removeV(v.id)}
+                  className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"
+                >
+                  <Trash className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button size="sm" variant="ghost" onClick={addV}>
               <Plus />
               افزودن ویژه
             </Button>
             <span className="text-[11px] text-slate-500 dark:text-slate-400">
-              مجموع سهم: <b className={Math.abs(sum - 100) < 0.05 ? 'text-emerald-600' : 'text-amber-600'}>{fmtPct(sum, 1)}</b>
+              مجموع سهم (ویژه‌های درون‌افق):{' '}
+              <b className={Math.abs(sum - 100) < 0.05 ? 'text-emerald-600' : 'text-amber-600'}>{fmtPct(sum, 1)}</b>
               {Math.abs(sum - 100) >= 0.05 && ' — نرمال‌سازی خودکار'}
+              {dropped > 0 && ` · ${toFa(dropped)} ویژه خارج از افق حذف و سهم‌ها بازمقیاس شد`}
             </span>
           </div>
         </div>

@@ -43,6 +43,17 @@ export function fmtPct(n: number, decimals = 1, fixed = false): string {
   return s.startsWith('-') ? `${LRI}${s}${PDI}` : s;
 }
 
+/**
+ * قالب ضریب/نسبت (مانند اهرم خروج) که مخرجش می‌تواند صفر شود.
+ * بی‌نهایت به‌صورت «∞» و مقدار نامعریف به‌صورت «—» نمایش داده می‌شود.
+ */
+export function fmtRatio(v: number, decimals = 2): string {
+  if (Number.isNaN(v)) return '—';
+  if (v === Infinity) return '∞';
+  if (v === -Infinity) return '−∞';
+  return fmtNumber(v, decimals, true);
+}
+
 /** نمایش فشرده با واحد فارسی (میلیون/میلیارد/هزار میلیارد) */
 export function fmtCompact(n: number, digits = 2): string {
   if (!Number.isFinite(n)) return '—';

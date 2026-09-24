@@ -151,6 +151,7 @@ export default function App() {
         setToast('فایل سناریو معتبر نیست');
       }
     };
+    reader.onerror = () => setToast('خواندن فایل ناموفق بود');
     reader.readAsText(file);
   }, []);
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { HandCoins, Hourglass, Scale, ShieldCheck, Target, TrendingDown, TriangleAlert, Users } from 'lucide-react';
 import type { GlobalConfig, SimResult } from '../types';
-import { fmtNumber, fmtPct, toFa } from '../lib/format';
+import { fmtNumber, fmtPct, fmtRatio, toFa } from '../lib/format';
 import { tierColor } from '../lib/presets';
 import { useDisplay } from '../context/display';
 import { Badge, Card, CardHeader, Money } from './ui';
@@ -112,7 +112,7 @@ export function RiskBanner({ result, horizon }: { result: SimResult; horizon: nu
         <div className="text-[12.5px] leading-6 text-emerald-900 dark:text-emerald-100">
           <div className="text-[14px] font-extrabold">ساختار محصول در افق {toFa(horizon)} ماهه از نظر نقدینگی پایدار است</div>
           مانده نقدینگی تجمعی در تمام ماه‌ها مثبت باقی می‌ماند. کمترین تراز <b><Money compact value={k.minCum} /></b> {unit} در ماه{' '}
-          {toFa(k.minCumMonth)} رخ می‌دهد و ضریب اهرم خروج {fmtNumber(k.leverage, 2, true)}× است.
+          {toFa(k.minCumMonth)} رخ می‌دهد و ضریب اهرم خروج {fmtRatio(k.leverage)}× است.
         </div>
       </div>
     );
@@ -156,7 +156,12 @@ export function KpiBoard({ result, config }: { result: SimResult; config: Global
             <>
               <span>{fmtPct(k.totalDeposit > 0 ? (k.totalCommitment / k.totalDeposit) * 100 : 0, 1)} از کل منابع</span>
               <span className="flex items-center gap-1">
-                <Users className="h-3.5 w-3.5" />≈ {fmtNumber(k.borrowers)} وام‌گیرنده
+                <Users className="h-3.5 w-3.5" />
+                {k.borrowers > 0 ? (
+                  <>≈ {fmtNumber(k.borrowers)} وام‌گیرنده</>
+                ) : (
+                  <>برآورد وام‌گیرنده: —</>
+                )}
               </span>
             </>
           }
@@ -182,8 +187,12 @@ export function KpiBoard({ result, config }: { result: SimResult; config: Global
           tone={levTone}
           icon={<Scale />}
           label="ضریب اهرم خروج نقدینگی"
-          value={`${fmtNumber(k.leverage, 2, true)}×`}
-          sub="(تعهد وام + خروج سپرده) ÷ منابع ورودی خالص"
+          value={`${fmtRatio(k.leverage)}×`}
+          sub={
+            k.leverage === Infinity
+              ? 'منابع ورودی خالص صفر است — هر خروجی بدون پوشش منابع انجام می‌شود'
+              : '(تعهد وام + خروج سپرده) ÷ منابع ورودی خالص'
+          }
           footer={
             <div className="w-full">
               <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
@@ -304,7 +313,7 @@ export function TierCommitmentTable({ result }: { result: SimResult }) {
       <CardHeader
         icon={<HandCoins />}
         title="وضعیت تعهدات به تفکیک پله (Double Liquidity Drain)"
-        subtitle={`تعهد وام و خروج سپرده در ماه سررسید T_dep به صورت همزمان رخ می‌دهد — ارقام به ${unit}`}
+        subtitle={`تعهد وام و خروج سپرده در ماه سررسید T_dep به صورت همزمان رخ می‌دهد — ارقام به ${unit}. پله‌ای که وامی اعطا نمی‌کند، وام‌گیرنده‌ای هم ندارد و خروج سپرده‌اش فقط با ω_churn برآورد می‌شود.`}
       />
       <div className="alm-scroll overflow-x-auto">
         <table className="w-full min-w-[860px] text-[12.5px]">
@@ -327,6 +336,11 @@ export function TierCommitmentTable({ result }: { result: SimResult }) {
                   <div className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ background: tierColor(r.index) }} />
                     <span className="max-w-[180px] truncate font-semibold text-slate-700 dark:text-slate-200">{r.tier.name}</span>
+                    {!r.lends && r.deposit > 0 && (
+                      <span title={r.eligible ? 'ضریب برابری این پله صفر است' : 'میانگین سپرده مشتری به حداقل مانده این پله نمی‌رسد'}>
+                        <Badge tone="slate">بدون اعطا</Badge>
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className={td}>
@@ -357,7 +371,7 @@ export function TierCommitmentTable({ result }: { result: SimResult }) {
                   <Money compact value={r.monthlyPmt} />
                   <span className="ms-1 text-[10.5px] text-slate-400">× {toFa(r.tier.tLoan)}</span>
                 </td>
-                <td className={td}>{fmtNumber(r.borrowers)}</td>
+                <td className={td}>{r.borrowers > 0 ? fmtNumber(r.borrowers) : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -380,7 +394,7 @@ export function TierCommitmentTable({ result }: { result: SimResult }) {
               <td className="px-3 py-2.5">
                 <Money compact value={tot.pmt} />
               </td>
-              <td className="px-3 py-2.5">{fmtNumber(tot.borrowers)}</td>
+              <td className="px-3 py-2.5">{tot.borrowers > 0 ? fmtNumber(tot.borrowers) : '—'}</td>
             </tr>
           </tfoot>
         </table>

@@ -120,6 +120,9 @@ export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
     out.activePreset = null;
   }
   if (raw.currency === 'toman' || raw.currency === 'rial') out.currency = raw.currency;
+  // A payload without a single recognizable section is not a scenario at all —
+  // rejecting it keeps a bogus file from silently wiping the active preset.
+  if (Object.keys(out).length === 0) return null;
   return out;
 }
 

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Sigma, SquareFunction } from 'lucide-react';
 import type { Behavior, GlobalConfig, SimResult } from '../types';
-import { fmtRaw, toFa } from '../lib/format';
+import { fmtPct, fmtRaw, toFa } from '../lib/format';
 import { tierColor } from '../lib/presets';
 import { useDisplay } from '../context/display';
 import { Card, CardHeader } from './ui';
@@ -102,6 +102,12 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`Total = ${m(tr.monthlyPmt)} × ${toFa(tr.tier.tLoan)} = ${m(tr.totalRepay)}  |  Fee = ${m(tr.totalIncome)}`}>
               Total Repayment = PMT × T_loan ;  Fee / Profit = Total − L
             </Formula>
+            {config.defaultRate > 0 && (
+              <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+                ارقام بالا <b>قراردادی</b> هستند (بدون در نظر گرفتن نکول). با نرخ نکول {fmtPct(config.defaultRate)}، مجموع اقساط
+                وصول‌شده در افق {m(k.totalPmtInHorizon)} و درآمد کارمزد/سود وصول‌شده {m(k.totalIncomeInHorizon)} {unit} است.
+              </p>
+            )}
           </Step>
 
           <Step
@@ -110,15 +116,27 @@ export function Methodology({ result, config, behavior }: Props) {
             desc="به دلیل ممنوعیت مسدودسازی سپرده، در ماه سررسید T_dep دو رویداد خروجی همزمان رخ می‌دهد: اعطای وام و برداشت اصل سپرده."
           >
             <Formula
-              live={`α_eff = min(${p(tr.tier.alpha / 100, 2)}, ${config.loanCap > 0 ? `${m(config.loanCap)} / ${m(tr.repBalance)}` : '∞'}) = ${p(tr.alphaEff, 4)}`}
+              live={`α_eff = min(${p(tr.tier.alpha / 100, 2)}, ${
+                config.loanCap > 0 && tr.repBalance > 0 ? `${m(config.loanCap)} / ${m(tr.repBalance)}` : '∞'
+              }) = ${p(tr.alphaEff, 4)}`}
             >
               α_eff = min(α , Cap / max(AvgTicket, MinBalance))
             </Formula>
-            <Formula live={`L = ${m(tr.deposit)} × ${p(tr.alphaEff, 4)} × ${p(take)} × ${p(app)} = ${m(tr.commitment)}`}>
+            <Formula
+              live={
+                tr.lends
+                  ? `L = ${m(tr.deposit)} × ${p(tr.alphaEff, 4)} × ${p(take)} × ${p(app)} = ${m(tr.commitment)}`
+                  : `L = 0   —   ${tr.eligible ? 'α_eff = 0' : 'AvgTicket < MinBalance'} ⇒ this tier grants no loan`
+              }
+            >
               Commitment_loan = D × α × ρ_take × ρ_app
             </Formula>
             <Formula
-              live={`W = ${m(tr.deposit)} × [${p(take)}×${p(ww)} + ${p(1 - take)}×${p(wc)}] = ${m(tr.withdrawal)}`}
+              live={
+                tr.lends
+                  ? `W = ${m(tr.deposit)} × [${p(take)}×${p(ww)} + ${p(1 - take)}×${p(wc)}] = ${m(tr.withdrawal)}`
+                  : `W = ${m(tr.deposit)} × ${p(wc)}   —   no borrower ⇒ ω_churn only = ${m(tr.withdrawal)}`
+              }
             >
               Withdrawal_dep = D × [ρ_take × ω_with + (1 − ρ_take) × ω_churn]
             </Formula>
@@ -140,7 +158,11 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}`}>
               Outflows_t = Σ_k Commitment_k,t + Σ_k Withdrawal_k,t
             </Formula>
-            <Formula live={`Leverage = (${m(k.totalCommitment)} + ${m(k.totalWithdrawal)}) / ${m(k.netDeposit)} = ${p(k.leverage, 3)}×`}>
+            <Formula
+              live={`Leverage = (${m(k.totalCommitment)} + ${m(k.totalWithdrawal)}) / ${m(k.netDeposit)} = ${
+                Number.isFinite(k.leverage) ? `${p(k.leverage, 3)}×` : '∞ (net resources = 0)'
+              }`}
+            >
               NCF_t = Inflows_t − Outflows_t ;  CumLiq_t = CumLiq_(t−1) + NCF_t
             </Formula>
           </Step>
