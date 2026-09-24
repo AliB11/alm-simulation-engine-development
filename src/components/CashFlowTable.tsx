@@ -1,7 +1,9 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ChevronDown, Download, ListFilter, Table2 } from 'lucide-react';
-import type { EventType, FlowEvent, GlobalConfig, MonthRow, SimResult } from '../types';
+import { BookOpenCheck, ChevronDown, Download, ListFilter, Table2 } from 'lucide-react';
+import type { FlowEvent, GlobalConfig, MonthRow, SimResult } from '../types';
 import { EPS } from '../lib/engine';
+import { EVENT_META } from '../lib/eventMeta';
+import { exportLedgerCsv } from '../lib/io';
 import { fmtNumber, fmtPct, toFa } from '../lib/format';
 import { tierColor } from '../lib/presets';
 import { useDisplay } from '../context/display';
@@ -10,16 +12,6 @@ import { cn } from '../utils/cn';
 
 type Filter = 'all' | 'deficit' | 'negNcf' | 'events';
 type Scale = 'full' | 'm' | 'b';
-
-const EVENT_META: Record<EventType, { label: string; sign: 1 | -1; color: string }> = {
-  deposit: { label: 'ورود سپرده جدید', sign: 1, color: '#10b981' },
-  reserve: { label: 'کسر سپرده قانونی (RR)', sign: -1, color: '#94a3b8' },
-  release: { label: 'آزادسازی سپرده قانونی', sign: 1, color: '#14b8a6' },
-  pmt: { label: 'وصول اقساط', sign: 1, color: '#6366f1' },
-  loan: { label: 'پرداخت تسهیلات (تعهد وام)', sign: -1, color: '#f43f5e' },
-  withdrawal: { label: 'برداشت اصل سپرده', sign: -1, color: '#f59e0b' },
-  profit: { label: 'سود پرداختی به سپرده‌گذاران', sign: -1, color: '#a855f7' },
-};
 
 function eventDetail(e: FlowEvent): string {
   const vin =
@@ -188,10 +180,21 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
         title="جدول ماهیانه گردش وجوه نقد (Cash-Flow Matrix)"
         subtitle="ریز جریان ورودی/خروجی هر ماه — روی هر سطر کلیک کنید تا تراکنش‌های تفکیکی به ازای هر پله و ویژه نمایش داده شود"
         actions={
-          <Button size="sm" variant="secondary" onClick={onExportCsv}>
-            <Download />
-            خروجی CSV
-          </Button>
+          <>
+            <Button size="sm" variant="secondary" onClick={onExportCsv}>
+              <Download />
+              ماتریس CSV
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              title="خروجی دفتر کل کامل: یک سطر به ازای هر رویداد پله/ویژه با مبلغ علامت‌دار"
+              onClick={() => exportLedgerCsv(result.rows, factor, unit)}
+            >
+              <BookOpenCheck />
+              دفتر کل CSV
+            </Button>
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3 text-[12px] dark:border-slate-800">

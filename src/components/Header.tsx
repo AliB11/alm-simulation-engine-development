@@ -29,7 +29,9 @@ const NAV = [
   { id: 'commitments', label: 'منابع و تعهدات', icon: Wallet },
   { id: 'charts', label: 'نمودارهای ریسک', icon: ChartArea },
   { id: 'stress', label: 'آزمون حساسیت', icon: FlaskConical },
-  { id: 'tables', label: 'جداول', icon: Table2 },
+  { id: 'advanced', label: 'مونت‌کارلو و بهینه‌یاب', icon: Activity },
+  { id: 'regulatory', label: 'سنجه‌های مقرراتی', icon: ShieldCheck },
+  { id: 'tables', label: 'مقایسه و جداول', icon: Table2 },
   { id: 'method', label: 'روش‌شناسی', icon: SquareFunction },
 ];
 

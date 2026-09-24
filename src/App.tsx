@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { ChartArea, FlaskConical, Layers, Settings2, SquareFunction, Table2, Wallet } from 'lucide-react';
+import { Activity, ChartArea, FlaskConical, Layers, Settings2, ShieldCheck, SquareFunction, Table2, Wallet } from 'lucide-react';
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, SimInput, Tier } from './types';
 import { DisplayContext, type DisplayState } from './context/display';
 import { simulate } from './lib/engine';
@@ -15,11 +15,15 @@ import {
   clearState,
   exportCashFlowCsv,
   exportScenario,
+  loadSlots,
   loadState,
   sanitizeState,
+  saveSlots,
   saveState,
   THEME_KEY,
 } from './lib/io';
+import { DEFAULT_REGULATORY, type RegulatoryParams } from './lib/regulatory';
+import { EMPTY_SLOTS, snapshotSlot, type ScenarioSlots, type SlotId } from './lib/scenarios';
 import { Header } from './components/Header';
 import { SectionHeading } from './components/ui';
 import { GlobalConfigPanel } from './components/GlobalConfigPanel';
@@ -27,6 +31,11 @@ import { TierBuilder } from './components/TierBuilder';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { LiquidityCharts } from './components/LiquidityCharts';
 import { SensitivityPanel } from './components/SensitivityPanel';
+import { MonteCarloPanel } from './components/MonteCarloPanel';
+import { OptimizerPanel } from './components/OptimizerPanel';
+import { RegulatoryPanel } from './components/RegulatoryPanel';
+import { MaturityLadder } from './components/MaturityLadder';
+import { ScenarioCompare } from './components/ScenarioCompare';
 import { TierComparison } from './components/TierComparison';
 import { CashFlowTable } from './components/CashFlowTable';
 import { Methodology } from './components/Methodology';
@@ -54,6 +63,11 @@ export default function App() {
     saved && 'activePreset' in saved ? (saved.activePreset ?? null) : DEFAULT_PRESET,
   );
   const [currency, setCurrency] = useState<Currency>(() => saved?.currency ?? 'toman');
+  const [regulatory, setRegulatory] = useState<RegulatoryParams>(() => ({
+    ...DEFAULT_REGULATORY,
+    ...(saved?.regulatory ?? {}),
+  }));
+  const [slots, setSlots] = useState<ScenarioSlots>(() => loadSlots() ?? EMPTY_SLOTS);
   const [dark, setDark] = useState<boolean>(initialDark);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -68,8 +82,12 @@ export default function App() {
   }, [dark]);
 
   useEffect(() => {
-    saveState({ config, tiers, behavior, schedule, activePreset, currency });
-  }, [config, tiers, behavior, schedule, activePreset, currency]);
+    saveState({ config, tiers, behavior, schedule, activePreset, currency, regulatory });
+  }, [config, tiers, behavior, schedule, activePreset, currency, regulatory]);
+
+  useEffect(() => {
+    saveSlots(slots);
+  }, [slots]);
 
   useEffect(() => {
     if (!toast) return;
@@ -122,6 +140,7 @@ export default function App() {
     setBehavior(DEFAULT_BEHAVIOR);
     setSchedule(DEFAULT_SCHEDULE);
     setActivePreset(DEFAULT_PRESET);
+    setRegulatory(DEFAULT_REGULATORY);
     setToast('تنظیمات به حالت پیش‌فرض بازگشت');
   }, []);
 
@@ -130,10 +149,62 @@ export default function App() {
     setToast('فایل CSV ماتریس جریان نقد دانلود شد');
   }, [result.rows, display.factor, display.unit]);
 
+  const patchRegulatory = useCallback((p: Partial<RegulatoryParams>) => setRegulatory((r) => ({ ...r, ...p })), []);
+
+  /* ---- تحلیل پیشرفته: اعمال خروجی بهینه‌یاب و اجرای مونت‌کارلو ---- */
+  const applyTiersDesign = useCallback((next: Tier[], label: string) => {
+    setTiersState(next);
+    setActivePreset(null);
+    setToast(`${label} روی پله‌ها اعمال شد`);
+  }, []);
+
+  const loadPerturbedRun = useCallback(
+    (patch: { behavior: Behavior; config: GlobalConfig; schedule: DepositSchedule }, label: string) => {
+      setBehavior(patch.behavior);
+      setConfig(patch.config);
+      setSchedule(patch.schedule);
+      setActivePreset(null);
+      setToast(`${label} در برنامه بارگذاری شد`);
+    },
+    [],
+  );
+
+  /* ---- مقایسهٔ سناریو A/B/C ---- */
+  const snapshotScenario = useCallback(
+    (id: SlotId) => {
+      setSlots((s) => ({ ...s, [id]: snapshotSlot(id, input, result.kpis) }));
+      setToast(`سناریوی جاری در جایگاه ${id} ذخیره شد`);
+    },
+    [input, result.kpis],
+  );
+
+  const loadScenario = useCallback(
+    (id: SlotId) => {
+      const slot = slots[id];
+      if (!slot) return;
+      setConfig(slot.config);
+      setTiersState(slot.tiers);
+      setBehavior(slot.behavior);
+      setSchedule(slot.schedule);
+      setActivePreset(null);
+      setToast(`سناریوی جایگاه ${id} بارگذاری شد`);
+    },
+    [slots],
+  );
+
+  const clearScenario = useCallback((id: SlotId) => {
+    setSlots((s) => ({ ...s, [id]: null }));
+    setToast(`جایگاه ${id} پاک شد`);
+  }, []);
+
+  const renameScenario = useCallback((id: SlotId, name: string) => {
+    setSlots((s) => (s[id] ? { ...s, [id]: { ...s[id]!, name: name.slice(0, 60) } } : s));
+  }, []);
+
   const exportJson = useCallback(() => {
-    exportScenario({ config, tiers, behavior, schedule, activePreset, currency });
+    exportScenario({ config, tiers, behavior, schedule, activePreset, currency, regulatory });
     setToast('سناریو ذخیره شد');
-  }, [config, tiers, behavior, schedule, activePreset, currency]);
+  }, [config, tiers, behavior, schedule, activePreset, currency, regulatory]);
 
   const importJson = useCallback((file: File) => {
     const reader = new FileReader();
@@ -146,6 +217,7 @@ export default function App() {
         if (data.behavior) setBehavior({ ...DEFAULT_BEHAVIOR, ...data.behavior });
         if (data.schedule) setSchedule({ ...DEFAULT_SCHEDULE, ...data.schedule });
         if (data.currency) setCurrency(data.currency);
+        if (data.regulatory) setRegulatory({ ...DEFAULT_REGULATORY, ...data.regulatory });
         setActivePreset(data.activePreset ?? null);
         setToast('سناریو با موفقیت بارگذاری شد');
       } catch {
@@ -248,13 +320,50 @@ export default function App() {
 
           <section>
             <SectionHeading
+              id="advanced"
+              index="بخش ۴-پ"
+              title="تحلیل پیشرفته: آزمون مونت‌کارلو و بهینه‌یاب طراحی"
+              subtitle="MONTE CARLO / VaR & INVERSE DESIGN OPTIMIZER"
+              icon={<Activity />}
+            />
+            <div className="space-y-6">
+              <MonteCarloPanel input={deferredInput} onLoadRun={loadPerturbedRun} />
+              <OptimizerPanel input={deferredInput} onApply={applyTiersDesign} />
+            </div>
+          </section>
+
+          <section>
+            <SectionHeading
+              id="regulatory"
+              index="بخش ۴-ت"
+              title="سنجه‌های مقرراتی‌مانند و نردبان سررسید"
+              subtitle="LCR / NSFR / MATURITY GAP PROXIES & TIER ATTRIBUTION"
+              icon={<ShieldCheck />}
+            />
+            <div className="space-y-6">
+              <RegulatoryPanel result={result} config={config} params={regulatory} onParams={patchRegulatory} />
+              <MaturityLadder result={result} config={config} params={regulatory} />
+            </div>
+          </section>
+
+          <section>
+            <SectionHeading
               id="tables"
               index="بخش ۵"
-              title="جداول مقایسه پله‌ها و ریز جریان نقدینگی"
-              subtitle="TIER COMPARISON & MONTHLY CASH-FLOW MATRIX"
+              title="مقایسه سناریوها، پله‌ها و ریز جریان نقدینگی"
+              subtitle="SCENARIO A/B/C · TIER COMPARISON · MONTHLY CASH-FLOW MATRIX"
               icon={<Table2 />}
             />
             <div className="space-y-6">
+              <ScenarioCompare
+                kpis={result.kpis}
+                currentRows={result.rows}
+                slots={slots}
+                onSnapshot={snapshotScenario}
+                onLoad={loadScenario}
+                onClear={clearScenario}
+                onRename={renameScenario}
+              />
               <TierComparison tiers={tiers} config={config} />
               <CashFlowTable
                 result={result}
@@ -273,7 +382,7 @@ export default function App() {
               subtitle="METHODOLOGY & LIVE FORMULA TRACE"
               icon={<SquareFunction />}
             />
-            <Methodology result={result} config={config} behavior={behavior} />
+            <Methodology result={result} config={config} behavior={behavior} regulatory={regulatory} />
           </section>
         </main>
 

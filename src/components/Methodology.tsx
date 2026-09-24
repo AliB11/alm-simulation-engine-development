@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Sigma, SquareFunction } from 'lucide-react';
 import type { Behavior, GlobalConfig, SimResult } from '../types';
-import { fmtPct, fmtRaw, toFa } from '../lib/format';
+import { tierAttribution } from '../lib/attribution';
+import { fmtPct, fmtRaw, fmtRatio, toFa } from '../lib/format';
 import { tierColor } from '../lib/presets';
+import { computeRegulatory, type RegulatoryParams } from '../lib/regulatory';
 import { useDisplay } from '../context/display';
 import { Card, CardHeader } from './ui';
 
@@ -49,13 +51,20 @@ interface Props {
   result: SimResult;
   config: GlobalConfig;
   behavior: Behavior;
+  regulatory: RegulatoryParams;
 }
 
-export function Methodology({ result, config, behavior }: Props) {
+export function Methodology({ result, config, behavior, regulatory }: Props) {
   const { factor, unit } = useDisplay();
   const [sel, setSel] = useState(0);
   const tr = result.tiers[Math.min(sel, Math.max(0, result.tiers.length - 1))];
   const k = result.kpis;
+  const reg = useMemo(() => computeRegulatory(result.rows, regulatory), [result.rows, regulatory]);
+  const attr = useMemo(() => tierAttribution(result.rows, tierColor), [result.rows]);
+  const worst = attr.tiers.reduce(
+    (acc, t) => (acc === null || t.holeDelta < acc.holeDelta ? t : acc),
+    null as (typeof attr.tiers)[number] | null,
+  );
   const m = (v: number) => fmtRaw(Math.round(v * factor));
   const p = (v: number, d = 2) => fmtRaw(v, d);
   const take = behavior.takeUpRate / 100;
@@ -167,8 +176,10 @@ export function Methodology({ result, config, behavior }: Props) {
             <Formula live={`RR = ${p(RR)}  →  Net deposits = ${m(k.totalDeposit)} × ${p(1 - RR)} = ${m(k.netDeposit)}`}>
               Inflows_t = D_new,t × (1 − RR) + Σ_k PMT_k,t
             </Formula>
-            <Formula live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}`}>
-              Outflows_t = Σ_k Commitment_k,t + Σ_k Withdrawal_k,t
+            <Formula
+              live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}  |  Σ Deposit profit = ${m(k.totalProfitPaid)}`}
+            >
+              Outflows_t = Σ_k Commitment_k,t + Σ_k Withdrawal_k,t + DepositProfit_t
             </Formula>
             <Formula
               live={`Leverage = (${m(k.totalCommitment)} + ${m(k.totalWithdrawal)}) / ${m(k.netDeposit)} = ${
@@ -214,6 +225,82 @@ export function Methodology({ result, config, behavior }: Props) {
             >
               Net Margin = NII − Interbank Funding Cost
             </Formula>
+          </Step>
+
+          <Step
+            letter="و"
+            title="سنجه‌های مقرراتی‌مانند — LCR، NSFR و شکاف سررسید"
+            desc="نسخهٔ آموزشی و قابل تنظیم از پوشش نقدینگی، تأمین مالی پایدار و میانگین وزنی عمر. ضرایب را کاربر تعیین می‌کند و این اعداد جایگزین تعاریف رسمی ناظر نیستند."
+          >
+            <Formula
+              live={
+                reg.minLcr === null
+                  ? 'no month had a stressed outflow'
+                  : `min LCR = ${fmtRaw(reg.minLcr, 1)}% at month ${toFa(reg.minLcrMonth ?? 0)}  ·  months < 100% = ${toFa(reg.monthsBelow100)}  ·  ω = ${fmtRaw(regulatory.stressRunoff, 1)}%`
+              }
+            >
+              LCR(t) = max(0, CumLiq_t) / (Outflow_t + ω × DepositBalance_t) × 100
+            </Formula>
+            <Formula
+              live={
+                reg.nsfr === null
+                  ? `NSFR undefined at month ${toFa(reg.nsfrMonth)} (required stable funding = 0)`
+                  : `NSFR(month ${toFa(reg.nsfrMonth)}) = ${m(reg.asf)} / ${m(reg.rsf)} = ${fmtRaw(reg.nsfr, 1)}%   (w = ${fmtRaw(regulatory.stableWeight, 0)}%, r = ${fmtRaw(regulatory.loanWeight, 0)}%)`
+              }
+            >
+              NSFR(m) = DepositBalance(m) × w / (LoanBook(m) × r) × 100
+            </Formula>
+            <Formula
+              live={
+                reg.maturityGap === null
+                  ? 'WAL undefined (no principal inflow or liability outflow)'
+                  : `WAL assets ${fmtRaw(reg.walAssets ?? 0, 2)} − WAL liabilities ${fmtRaw(reg.walLiabilities ?? 0, 2)} = ${fmtRaw(reg.maturityGap, 2)} months`
+              }
+            >
+              Gap = Σ t·Inflow(t)/Σ Inflow − Σ t·Outflow(t)/Σ Outflow
+            </Formula>
+          </Step>
+
+          <Step
+            letter="ز"
+            title="انتساب حفرهٔ نقدینگی به پله‌ها"
+            desc="حذف تحلیلی هر پله (بدون شبیه‌سازی مجدد): جریان‌های منتسب به آن پله از مسیر نقدینگی کم می‌شود. سود سپرده بر پایهٔ ماندهٔ هر پله توزیع می‌گردد."
+          >
+            <Formula
+              live={
+                worst
+                  ? `largest hole reduction by removing «${worst.name}»: Δhole = ${m(worst.holeDelta)}`
+                  : 'no tier events to attribute'
+              }
+            >
+              cum′_k(t) = cum(t) − Σ_j≤t ncf_k(j)
+            </Formula>
+            <Formula live={`base hole = ${m(attr.base.maxHole)}  ·  tiers attributed = ${toFa(attr.tiers.length)}`}>
+              Δhole_k = maxHole(without k) − maxHole(base)
+            </Formula>
+          </Step>
+
+          <Step
+            letter="ح"
+            title="آزمون مونت‌کارلو — توزیع ریسک به‌جای یک عدد"
+            desc="نرخ‌های رفتاری حول برآورد شما با توزیع نرمال و حجم منابع با توزیع لگ‌نرمال نمونه‌گیری می‌شوند. دانهٔ تصادفی قابل تنظیم است تا هر توزیع دقیقاً بازتولید شود."
+          >
+            <Formula live={`current point estimate: hole = ${m(k.maxHole)}, margin = ${m(k.netMargin)}, tipping = ${k.tippingPoint === null ? 'none' : `month ${toFa(k.tippingPoint)}`}`}>
+              ρ′ = clamp(ρ + ε·σ, 0, 100) , ε ~ N(0,1) , σ = intensity × 20pp
+            </Formula>
+            <Formula>D′ = D × exp(ε · intensity × 0.25) ; timing shock ~ round(ε · intensity × 1.5)</Formula>
+            <Formula>P(tipping) = share of runs with min CumLiq &lt; 0 ; VaR₉₅ = P95(max hole)</Formula>
+          </Step>
+
+          <Step
+            letter="ط"
+            title="بهینه‌یاب طراحی — جست‌وجوی مختصاتی روی اهرم‌ها"
+            desc="اهرم‌ها (مقیاس α، جابه‌جایی انتظار، جابه‌جایی بازپرداخت، کج‌کردن سهم) همیشه یک‌جا روی پله‌های جاری اعمال می‌شوند. موجه بودن بر مقدار هدف اولویت دارد."
+          >
+            <Formula live={`baseline hole = ${m(k.maxHole)}  ·  baseline margin = ${m(k.netMargin)}  ·  leverage = ${Number.isFinite(k.leverage) ? `${fmtRatio(k.leverage)}×` : '∞'}`}>
+              maximize Objective(levers) subject to the constraints you set
+            </Formula>
+            <Formula>levers ∈ {'{'}α-scale, ΔT_dep, ΔT_loan, tilt{'}'} ; feasible designs outrank every infeasible one</Formula>
           </Step>
         </div>
       )}
