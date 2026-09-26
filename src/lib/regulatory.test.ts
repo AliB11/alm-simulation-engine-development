@@ -7,10 +7,10 @@ import { tierColor } from './presets';
 import { EPS, simulate } from './engine';
 import { near, presetInput } from './testUtils';
 
-const nikvam = presetInput('nikvam');
-const negin = presetInput('negin');
-const nikvamResult = simulate(nikvam, true);
-const neginResult = simulate(negin, true);
+const sampleTwo = presetInput('sample-2');
+const sampleThree = presetInput('sample-3');
+const sampleTwoResult = simulate(sampleTwo, true);
+const sampleThreeResult = simulate(sampleThree, true);
 
 describe('regulatory metrics — bucketing', () => {
   it('chooses a readable bucket size for every horizon', () => {
@@ -27,11 +27,11 @@ describe('regulatory metrics — bucketing', () => {
   });
 
   it('partitions the horizon exactly once', () => {
-    const reg = computeRegulatory(nikvamResult.rows, DEFAULT_REGULATORY);
-    const H = nikvamResult.rows.length;
+    const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
+    const H = sampleTwoResult.rows.length;
     assert.equal(reg.bucketSize, bucketSizeFor(H));
-    const firstMonth = nikvamResult.rows[0].t;
-    const lastMonth = nikvamResult.rows[H - 1].t;
+    const firstMonth = sampleTwoResult.rows[0].t;
+    const lastMonth = sampleTwoResult.rows[H - 1].t;
     let covered = 0;
     for (let i = 0; i < reg.buckets.length; i++) {
       const b = reg.buckets[i];
@@ -61,9 +61,9 @@ describe('regulatory metrics — bucketing', () => {
 describe('regulatory metrics — LCR proxy', () => {
   it('matches the documented formula month by month', () => {
     const params: RegulatoryParams = { stressRunoff: 10, stableWeight: 90, loanWeight: 85 };
-    const reg = computeRegulatory(nikvamResult.rows, params);
-    assert.equal(reg.lcr.length, nikvamResult.rows.length);
-    nikvamResult.rows.forEach((row, i) => {
+    const reg = computeRegulatory(sampleTwoResult.rows, params);
+    assert.equal(reg.lcr.length, sampleTwoResult.rows.length);
+    sampleTwoResult.rows.forEach((row, i) => {
       const p = reg.lcr[i];
       assert.equal(p.month, row.t);
       assert.equal(p.hqla, Math.max(0, row.cum));
@@ -77,8 +77,8 @@ describe('regulatory metrics — LCR proxy', () => {
   });
 
   it('never improves when the stress runoff is raised', () => {
-    const calm = computeRegulatory(nikvamResult.rows, { ...DEFAULT_REGULATORY, stressRunoff: 0 });
-    const stressed = computeRegulatory(nikvamResult.rows, { ...DEFAULT_REGULATORY, stressRunoff: 20 });
+    const calm = computeRegulatory(sampleTwoResult.rows, { ...DEFAULT_REGULATORY, stressRunoff: 0 });
+    const stressed = computeRegulatory(sampleTwoResult.rows, { ...DEFAULT_REGULATORY, stressRunoff: 20 });
     calm.lcr.forEach((p, i) => {
       const q = stressed.lcr[i];
       if (p.lcr !== null && q.lcr !== null) assert.ok(q.lcr <= p.lcr + 1e-9);
@@ -91,7 +91,7 @@ describe('regulatory metrics — LCR proxy', () => {
   });
 
   it('reports the binding month and the count of months below 100%', () => {
-    const reg = computeRegulatory(nikvamResult.rows, DEFAULT_REGULATORY);
+    const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
     const measured = reg.lcr.filter((p) => p.lcr !== null) as { month: number; lcr: number }[];
     assert.ok(measured.length > 0);
     const worst = measured.reduce((a, b) => (b.lcr < a.lcr ? b : a));
@@ -101,7 +101,7 @@ describe('regulatory metrics — LCR proxy', () => {
   });
 
   it('clamps nonsensical parameters instead of producing NaN', () => {
-    const reg = computeRegulatory(nikvamResult.rows, {
+    const reg = computeRegulatory(sampleTwoResult.rows, {
       stressRunoff: NaN,
       stableWeight: -50,
       loanWeight: 1e9,
@@ -116,44 +116,44 @@ describe('regulatory metrics — LCR proxy', () => {
 
 describe('regulatory metrics — NSFR proxy and maturity gap', () => {
   it('uses month 12 when the horizon allows it and the last month otherwise', () => {
-    const reg = computeRegulatory(nikvamResult.rows, DEFAULT_REGULATORY);
+    const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
     assert.equal(reg.nsfrMonth, 12);
-    const row = nikvamResult.rows.find((r) => r.t === 12)!;
+    const row = sampleTwoResult.rows.find((r) => r.t === 12)!;
     assert.ok(near(reg.asf, (row.depositBalance * DEFAULT_REGULATORY.stableWeight) / 100, 1e-12));
     assert.ok(near(reg.rsf, (row.loanBook * DEFAULT_REGULATORY.loanWeight) / 100, 1e-12));
     assert.ok(near(reg.nsfr!, (reg.asf / reg.rsf) * 100, 1e-12));
 
-    const short = simulate({ ...nikvam, config: { ...nikvam.config, horizon: 6 } }, false);
+    const short = simulate({ ...sampleTwo, config: { ...sampleTwo.config, horizon: 6 } }, false);
     const regShort = computeRegulatory(short.rows, DEFAULT_REGULATORY);
     assert.equal(regShort.nsfrMonth, 6);
     assert.equal(regShort.nsfrMonth, short.rows[short.rows.length - 1].t);
   });
 
   it('scales linearly with the stability and illiquidity weights', () => {
-    const base = computeRegulatory(nikvamResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 85 });
-    const doubleStable = computeRegulatory(nikvamResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 42.5 });
+    const base = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 85 });
+    const doubleStable = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 42.5 });
     // نصف‌شدن ضریب RSF باید NSFR را دو برابر کند
     assert.ok(near(doubleStable.nsfr!, base.nsfr! * 2, 1e-9));
-    const zeroWeight = computeRegulatory(nikvamResult.rows, { stressRunoff: 5, stableWeight: 0, loanWeight: 85 });
+    const zeroWeight = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 0, loanWeight: 85 });
     assert.equal(zeroWeight.nsfr, 0);
-    const zeroRsf = computeRegulatory(nikvamResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 0 });
+    const zeroRsf = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 0 });
     assert.equal(zeroRsf.nsfr, null, 'division by zero RSF must stay undefined');
   });
 
   it('computes WAL from the actual principal and withdrawal profiles', () => {
-    const reg = computeRegulatory(nikvamResult.rows, DEFAULT_REGULATORY);
-    const H = nikvamResult.rows.length;
+    const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
+    const H = sampleTwoResult.rows.length;
     let wIn = 0;
     let tIn = 0;
     let wOut = 0;
     let tOut = 0;
-    for (const row of nikvamResult.rows) {
+    for (const row of sampleTwoResult.rows) {
       wIn += row.t * Math.max(0, row.principalIn);
       tIn += Math.max(0, row.principalIn);
       wOut += row.t * Math.max(0, row.withdrawalOut);
       tOut += Math.max(0, row.withdrawalOut);
     }
-    const lastRow = nikvamResult.rows[H - 1];
+    const lastRow = sampleTwoResult.rows[H - 1];
     const surviving = lastRow.depositBalance;
     wOut += lastRow.t * surviving;
     tOut += surviving;
@@ -166,14 +166,14 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
   });
 
   it('aggregates the ladder exactly from the cash-flow matrix', () => {
-    const reg = computeRegulatory(nikvamResult.rows, DEFAULT_REGULATORY);
+    const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
     const inflow = reg.ladder.reduce((s, r) => s + r.inflow, 0);
     const withdrawal = reg.ladder.reduce((s, r) => s + r.withdrawal, 0);
     const profit = reg.ladder.reduce((s, r) => s + r.profit, 0);
-    assert.ok(near(inflow, nikvamResult.rows.reduce((s, r) => s + Math.max(0, r.principalIn), 0), 1e-9));
-    assert.ok(near(withdrawal, nikvamResult.rows.reduce((s, r) => s + Math.max(0, r.withdrawalOut), 0), 1e-9));
-    assert.ok(near(profit, nikvamResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0), 1e-9));
-    assert.equal(profit, 0, 'nikvam pays no deposit profit at the preset default');
+    assert.ok(near(inflow, sampleTwoResult.rows.reduce((s, r) => s + Math.max(0, r.principalIn), 0), 1e-9));
+    assert.ok(near(withdrawal, sampleTwoResult.rows.reduce((s, r) => s + Math.max(0, r.withdrawalOut), 0), 1e-9));
+    assert.ok(near(profit, sampleTwoResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0), 1e-9));
+    assert.equal(profit, 0, 'sampleTwo pays no deposit profit at the preset default');
 
     for (const r of reg.ladder) {
       assert.ok(near(r.outflow, r.withdrawal + r.profit, 1e-12));
@@ -187,24 +187,24 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
     const bucketsOutflow = reg.buckets.reduce((s, b) => s + b.outflow, 0);
     assert.ok(near(bucketsOutflow, withdrawal + profit, 1e-9));
 
-    const disbursed = nikvamResult.rows.reduce((s, r) => s + r.loanOut, 0);
+    const disbursed = sampleTwoResult.rows.reduce((s, r) => s + r.loanOut, 0);
     assert.ok(near(reg.recoveryRate!, inflow / disbursed, 1e-9));
   });
 });
 
 describe('tier attribution — analytic removal of a tier', () => {
   it('explains the whole cumulative liquidity path when every flow is tier-attributed', () => {
-    const attr = tierAttribution(nikvamResult.rows, tierColor);
+    const attr = tierAttribution(sampleTwoResult.rows, tierColor);
     assert.ok(attr.tiers.length > 0);
     assert.equal(attr.unattributedProfit, 0);
     // Σ_k [cum(H) − cumWithout_k(H)] = Σ_t ncf_t = cum(H) − initialLiquidity
     const explained = attr.tiers.reduce((s, t) => s + (attr.base.endCum - t.endCumWithout), 0);
     assert.ok(
-      near(explained, attr.base.endCum - nikvam.config.initialLiquidity, 1e-9),
-      `attributed ${explained} vs path ${attr.base.endCum - nikvam.config.initialLiquidity}`,
+      near(explained, attr.base.endCum - sampleTwo.config.initialLiquidity, 1e-9),
+      `attributed ${explained} vs path ${attr.base.endCum - sampleTwo.config.initialLiquidity}`,
     );
     for (const t of attr.tiers) {
-      assert.equal(t.cumWithout.length, nikvamResult.rows.length);
+      assert.equal(t.cumWithout.length, sampleTwoResult.rows.length);
       assert.ok(t.maxHoleWithout >= 0);
       assert.ok(Number.isFinite(t.minCumWithout));
       assert.ok(near(t.ncf, attr.base.endCum - t.endCumWithout, 1e-9));
@@ -213,8 +213,8 @@ describe('tier attribution — analytic removal of a tier', () => {
   });
 
   it('reproduces the engine KPIs for the base case', () => {
-    const attr = tierAttribution(nikvamResult.rows, tierColor);
-    const k = nikvamResult.kpis;
+    const attr = tierAttribution(sampleTwoResult.rows, tierColor);
+    const k = sampleTwoResult.kpis;
     assert.ok(near(attr.base.maxHole, k.maxHole, 1e-12));
     assert.equal(attr.base.tipping, k.tippingPoint);
     assert.equal(attr.base.minCumMonth, k.minCumMonth);
@@ -222,9 +222,9 @@ describe('tier attribution — analytic removal of a tier', () => {
   });
 
   it('splits the portfolio-level deposit profit across tiers by their balances', () => {
-    const attr = tierAttribution(neginResult.rows, tierColor);
-    const totalProfit = neginResult.rows.reduce((s, r) => s + r.profitPaid, 0);
-    assert.ok(totalProfit > 0, 'the negin preset pays deposit profit');
+    const attr = tierAttribution(sampleThreeResult.rows, tierColor);
+    const totalProfit = sampleThreeResult.rows.reduce((s, r) => s + r.profitPaid, 0);
+    assert.ok(totalProfit > 0, 'the sampleThree preset pays deposit profit');
     const attributed = attr.tiers.reduce((s, t) => s + t.profit, 0);
     assert.ok(
       near(attributed + attr.unattributedProfit, totalProfit, 1e-9),
@@ -235,13 +235,13 @@ describe('tier attribution — analytic removal of a tier', () => {
   });
 
   it('attributes the deposit and loan flows of each tier to that tier only', () => {
-    const attr = tierAttribution(nikvamResult.rows, tierColor);
+    const attr = tierAttribution(sampleTwoResult.rows, tierColor);
     const byTier = new Map(attr.tiers.map((t) => [t.tierId, t]));
     let depositTotal = 0;
     let withdrawalTotal = 0;
     let loanTotal = 0;
     let pmtTotal = 0;
-    for (const row of nikvamResult.rows) {
+    for (const row of sampleTwoResult.rows) {
       for (const e of row.events) {
         if (e.tierIndex < 0) continue;
         const t = byTier.get(e.tierId);
@@ -259,8 +259,8 @@ describe('tier attribution — analytic removal of a tier', () => {
   });
 
   it('builds a heat matrix that adds up to the tier outflows', () => {
-    const attr = tierAttribution(nikvamResult.rows, tierColor);
-    const H = nikvamResult.rows.length;
+    const attr = tierAttribution(sampleTwoResult.rows, tierColor);
+    const H = sampleTwoResult.rows.length;
     assert.equal(attr.heat.bucketSize, bucketSizeFor(H));
     assert.equal(attr.heat.bucketLabels.length, Math.ceil(H / attr.heat.bucketSize));
     assert.equal(attr.heat.cells.length, attr.tiers.length);
@@ -272,12 +272,12 @@ describe('tier attribution — analytic removal of a tier', () => {
     assert.ok(near(heatTotal, withdrawal + profit, 1e-9), `heat ${heatTotal} vs outflows ${withdrawal + profit}`);
 
     const inflowTotal = attr.heat.inflow.reduce((s, v) => s + v, 0);
-    assert.ok(near(inflowTotal, nikvamResult.rows.reduce((s, r) => s + Math.max(0, r.principalIn), 0), 1e-9));
+    assert.ok(near(inflowTotal, sampleTwoResult.rows.reduce((s, r) => s + Math.max(0, r.principalIn), 0), 1e-9));
     for (const row of attr.heat.cells) for (const v of row) assert.ok(Number.isFinite(v) && v >= 0);
   });
 
   it('reports the tipping shift only when it is meaningful', () => {
-    const attr = tierAttribution(nikvamResult.rows, tierColor);
+    const attr = tierAttribution(sampleTwoResult.rows, tierColor);
     for (const t of attr.tiers) {
       if (attr.base.tipping === null) {
         assert.equal(t.tippingDelta, null);
@@ -297,7 +297,7 @@ describe('tier attribution — analytic removal of a tier', () => {
     assert.equal(empty.unattributedProfit, 0);
 
     const unallocated = simulate(
-      { ...nikvam, tiers: nikvam.tiers.map((t) => ({ ...t, allocation: 0 })) },
+      { ...sampleTwo, tiers: sampleTwo.tiers.map((t) => ({ ...t, allocation: 0 })) },
       true,
     );
     const attr = tierAttribution(unallocated.rows, tierColor);

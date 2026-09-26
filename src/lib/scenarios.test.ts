@@ -6,8 +6,8 @@ import { presetInput } from './testUtils';
 
 describe('scenario comparison helpers', () => {
   it('describes input differences in Persian digits and contract names', () => {
-    const a = presetInput('nikvam');
-    const b = presetInput('negin');
+    const a = presetInput('sample-2');
+    const b = presetInput('sample-3');
     const ka = simulate(a, false).kpis;
     const kb = simulate(b, false).kpis;
     const slotA = snapshotSlot('A', a, ka, 'پایه');
@@ -24,7 +24,7 @@ describe('scenario comparison helpers', () => {
   });
 
   it('falls back to an automatic Persian name and does not mutate the source input', () => {
-    const input = presetInput('mehrabani');
+    const input = presetInput('sample-1');
     const before = JSON.stringify(input);
     const slot = snapshotSlot('C', input, simulate(input, false).kpis);
     assert.ok(slot.name.startsWith('سناریوی C'));
@@ -35,7 +35,7 @@ describe('scenario comparison helpers', () => {
   });
 
   it('reports no diffs for an identical pair', () => {
-    const input = presetInput('nikvam');
+    const input = presetInput('sample-2');
     const kpis = simulate(input, false).kpis;
     const a = snapshotSlot('A', input, kpis, 'یک');
     const b = snapshotSlot('B', input, kpis, 'دو');

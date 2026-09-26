@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash } from 'lucide-react';
 import type { GlobalConfig, Tier, TierResult } from '../types';
-import { PRESETS, tierColor, uid } from '../lib/presets';
+import { PRESETS, tierColor, tierLabel, uid } from '../lib/presets';
 import { TIER_ALPHA_MAX } from '../lib/limits';
 import { globalRate } from '../lib/engine';
 import { fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
@@ -32,7 +32,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
   const duplicate = (id: string) => {
     const idx = tiers.findIndex((t) => t.id === id);
     if (idx < 0) return;
-    const copy: Tier = { ...tiers[idx], id: uid(), name: `${tiers[idx].name} (کپی)` };
+    const copy: Tier = { ...tiers[idx], id: uid(), name: tierLabel(idx + 1) };
     const next = [...tiers];
     next.splice(idx + 1, 0, copy);
     onChange(next);
@@ -52,7 +52,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
       ...tiers,
       {
         id: uid(),
-        name: `پله سفارشی ${toFa(tiers.length + 1)}`,
+        name: tierLabel(tiers.length),
         tDep: 6,
         tLoan: 24,
         alpha: 100,
@@ -89,7 +89,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
         actions={
           <Button variant="primary" size="sm" onClick={add}>
             <Plus />
-            افزودن پله جدید
+            افزودن حالت جدید
           </Button>
         }
       />
@@ -115,14 +115,14 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                   <Sparkles className={cn('h-4 w-4', active ? 'text-indigo-500' : 'text-slate-400 group-hover:text-indigo-400')} />
                   {p.name}
                 </span>
-                <Badge tone={active ? 'indigo' : 'slate'}>{p.bank}</Badge>
+                <Badge tone={active ? 'indigo' : 'slate'}>الگوی قابل ویرایش</Badge>
               </div>
               <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-slate-500 dark:text-slate-400">{p.description}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Badge tone={p.contractType === 'qard' ? 'emerald' : 'amber'}>
                   {p.contractType === 'qard' ? 'قرض‌الحسنه' : 'مرابحه'} {fmtPct(p.rate, 1)}
                 </Badge>
-                <Badge>{toFa(p.tiers.length)} پله</Badge>
+                <Badge>{toFa(p.tiers.length)} حالت</Badge>
                 <Badge>سقف {fmtNumber(p.loanCap / 1e6)} میلیون</Badge>
                 {active && <Badge tone="indigo">فعال</Badge>}
               </div>
@@ -133,11 +133,10 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
 
       {/* Table */}
       <div className="alm-scroll overflow-x-auto px-5 pb-3 pt-3">
-        <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-[12.5px]">
+        <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-[12.5px]">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-950/40">
-              <th className={cn(th, 'rounded-r-lg text-center')}>#</th>
-              <th className={th}>نام / عنوان پله</th>
+              <th className={cn(th, 'rounded-r-lg')}>عنوان حالت</th>
               <th className={th}>
                 دوره انتظار <span className="font-mono text-[10px] font-medium text-slate-400">T_dep</span>
               </th>
@@ -168,8 +167,8 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
           <tbody>
             {tiers.length === 0 && (
               <tr>
-                <td colSpan={11} className="py-10 text-center text-sm text-slate-400">
-                  هیچ پله‌ای تعریف نشده است. یک پیش‌تنظیم انتخاب کنید یا «افزودن پله جدید» را بزنید.
+                <td colSpan={10} className="py-10 text-center text-sm text-slate-400">
+                  هیچ حالتی تعریف نشده است. یک نمونه طرح انتخاب کنید یا «افزودن حالت جدید» را بزنید.
                 </td>
               </tr>
             )}
@@ -178,20 +177,16 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
               const effShare = allocSum > 0 ? (Math.max(0, t.allocation) / allocSum) * 100 : 0;
               return (
                 <tr key={t.id} className="group transition hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
-                  <td className="border-b border-slate-100 px-2 py-2 text-center dark:border-slate-800">
-                    <span
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-sm"
-                      style={{ background: tierColor(i) }}
-                    >
-                      {toFa(i + 1)}
-                    </span>
-                  </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
-                    <input
-                      value={t.name}
-                      onChange={(e) => update(t.id, { name: e.target.value })}
-                      className="h-8 w-full min-w-[170px] rounded-lg border border-slate-200 bg-white px-2.5 text-[12.5px] font-semibold text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-100"
-                    />
+                    <div className="flex min-w-[135px] items-center gap-2">
+                      <span
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-sm"
+                        style={{ background: tierColor(i) }}
+                      >
+                        {toFa(i + 1)}
+                      </span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">{tierLabel(i)}</span>
+                    </div>
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
                     <NumField
@@ -375,7 +370,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
         </div>
         <Button variant="secondary" size="sm" onClick={add}>
           <Plus />
-          افزودن پله
+          افزودن حالت
         </Button>
       </div>
     </Card>

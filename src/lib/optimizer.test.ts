@@ -17,7 +17,7 @@ import {
 import { simulate } from './engine';
 import { near, presetInput } from './testUtils';
 
-const input = presetInput('nikvam');
+const input = presetInput('sample-2');
 const sumAlloc = (tiers: Tier[]) => tiers.reduce((s, t) => s + t.allocation, 0);
 
 describe('design optimizer — lever mechanics', () => {
@@ -118,7 +118,7 @@ describe('design optimizer — objective, constraints and search', () => {
     assert.deepEqual(violations(kpis, { ...DEFAULT_CONSTRAINTS, maxHolePct: 0, requirePositiveMargin: false }), []);
 
     const loose = violations(kpis, { maxHolePct: 0, requireSolvent: true, maxLeverage: 0, requirePositiveMargin: true });
-    assert.ok(loose.includes('حاشیهٔ خالص منفی'), 'nikvam is loss-making at defaults');
+    assert.ok(loose.includes('حاشیهٔ خالص منفی'), 'sampleTwo is loss-making at defaults');
     if (kpis.tippingPoint !== null) {
       assert.ok(loose.some((v) => v.includes('واژگونی')));
     }

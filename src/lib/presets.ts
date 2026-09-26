@@ -1,4 +1,5 @@
 import type { Behavior, ContractType, DepositSchedule, GlobalConfig, Tier } from '../types';
+import { toFa } from './format';
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -17,88 +18,116 @@ export const TIER_COLORS = [
 
 export const tierColor = (i: number) => TIER_COLORS[((i % TIER_COLORS.length) + TIER_COLORS.length) % TIER_COLORS.length];
 
+const PERSIAN_ORDINALS = [
+  'اول',
+  'دوم',
+  'سوم',
+  'چهارم',
+  'پنجم',
+  'ششم',
+  'هفتم',
+  'هشتم',
+  'نهم',
+  'دهم',
+  'یازدهم',
+  'دوازدهم',
+  'سیزدهم',
+  'چهاردهم',
+  'پانزدهم',
+  'شانزدهم',
+  'هفدهم',
+  'هجدهم',
+  'نوزدهم',
+  'بیستم',
+];
+
+/** عنوان ثابت و قابل‌پیش‌بینی هر حالت بر اساس جایگاه آن در فهرست */
+export function tierLabel(index: number): string {
+  const ordinal = Math.max(1, Math.floor(Number.isFinite(index) ? index : 0) + 1);
+  const word = PERSIAN_ORDINALS[ordinal - 1];
+  return word ? `حالت ${word}` : `حالت شمارهٔ ${toFa(ordinal)}`;
+}
+
+/** نام حالت‌ها را پس از افزودن، حذف یا جابه‌جایی دوباره بر اساس ترتیب می‌سازد. */
+export function labelTiers(tiers: Tier[]): Tier[] {
+  return tiers.map((tier, index) => ({ ...tier, name: tierLabel(index) }));
+}
+
 export interface Preset {
   key: string;
   name: string;
-  bank: string;
   description: string;
   contractType: ContractType;
   rate: number;
   loanCap: number;
-  /** نرخ سود پرداختی روی خود سپرده (سپردهٔ قرض‌الحسنه = ۰، سپردهٔ سرمایه‌گذاری = نرخ مصوب) */
+  /** نرخ سود پرداختی روی خود سپرده؛ صفر یعنی الگوی سپرده بدون سود */
   depositProfitRate: number;
   tiers: Omit<Tier, 'id'>[];
 }
 
 /**
- * الگوهای واقعی بازار — برگرفته از اطلاعات منتشرشده عمومی
- * (ضرایب برخی پله‌ها تقریبی‌اند و صرفاً برای شبیه‌سازی ارائه شده‌اند)
+ * سه الگوی عمومی و قابل‌ویرایش برای شروع طراحی محصول.
+ * اعداد صرفاً نمونه‌اند و به محصول یا مؤسسهٔ مشخصی نسبت داده نمی‌شوند.
  */
 export const PRESETS: Preset[] = [
   {
-    key: 'mehrabani',
-    name: 'طرح مهربانی',
-    bank: 'بانک ملی ایران',
-    description:
-      'قرض‌الحسنه با کارمزد ۴٪، میانگین‌گیری ۱ تا ۱۲ ماه، بازپرداخت ۶ تا ۶۰ ماه، حداکثر ضریب ۳۷۰٪ و سقف فردی ۳۰۰ میلیون تومان؛ بدون مسدودی سپرده.',
+    key: 'sample-1',
+    name: 'نمونه طرح اول',
+    description: 'الگوی قرض‌الحسنه با دوره‌های انتظار و بازپرداخت متنوع؛ همهٔ ضرایب و حدود صرفاً نمونه و قابل ویرایش‌اند.',
     contractType: 'qard',
     rate: 4,
     loanCap: 300_000_000,
     depositProfitRate: 0,
     tiers: [
-      { name: 'مهربانی ۱ ماهه / ۶ قسط', tDep: 1, tLoan: 6, alpha: 60, minBalance: 5_000_000, allocation: 10, rateOverride: null },
-      { name: 'مهربانی ۳ ماهه / ۱۲ قسط', tDep: 3, tLoan: 12, alpha: 90, minBalance: 10_000_000, allocation: 15, rateOverride: null },
-      { name: 'مهربانی ۶ ماهه / ۲۴ قسط', tDep: 6, tLoan: 24, alpha: 90, minBalance: 20_000_000, allocation: 25, rateOverride: null },
-      { name: 'مهربانی ۱۲ ماهه / ۱۲ قسط', tDep: 12, tLoan: 12, alpha: 370, minBalance: 30_000_000, allocation: 20, rateOverride: null },
-      { name: 'مهربانی ۱۲ ماهه / ۳۶ قسط', tDep: 12, tLoan: 36, alpha: 125, minBalance: 30_000_000, allocation: 20, rateOverride: null },
-      { name: 'مهربانی ۱۲ ماهه / ۶۰ قسط', tDep: 12, tLoan: 60, alpha: 75, minBalance: 30_000_000, allocation: 10, rateOverride: null },
+      { name: tierLabel(0), tDep: 1, tLoan: 6, alpha: 60, minBalance: 5_000_000, allocation: 10, rateOverride: null },
+      { name: tierLabel(1), tDep: 3, tLoan: 12, alpha: 90, minBalance: 10_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(2), tDep: 6, tLoan: 24, alpha: 90, minBalance: 20_000_000, allocation: 25, rateOverride: null },
+      { name: tierLabel(3), tDep: 12, tLoan: 12, alpha: 370, minBalance: 30_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(4), tDep: 12, tLoan: 36, alpha: 125, minBalance: 30_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(5), tDep: 12, tLoan: 60, alpha: 75, minBalance: 30_000_000, allocation: 10, rateOverride: null },
     ],
   },
   {
-    key: 'nikvam',
-    name: 'طرح نیک‌وام',
-    bank: 'بانک ملت',
-    description:
-      'حساب قرض‌الحسنه پس‌انداز نیک؛ کارمزد ۴٪، معدل‌گیری ۱ تا ۱۲ ماه، ضریب ۱۰٪ تا ۳۲۰٪ متناسب با مدت بازپرداخت ۱۲ تا ۶۰ ماه، سقف فردی ۳۰۰ میلیون تومان.',
+    key: 'sample-2',
+    name: 'نمونه طرح دوم',
+    description: 'الگوی قرض‌الحسنه برای آزمودن گزینه‌های مختلف؛ ترکیب ۴ ماه انتظار و ۱۲ قسط نیز در آن تعریف شده است.',
     contractType: 'qard',
     rate: 4,
     loanCap: 300_000_000,
     depositProfitRate: 0,
     tiers: [
-      { name: 'نیک ۱ ماهه / ۱۲ قسط', tDep: 1, tLoan: 12, alpha: 27, minBalance: 1_000_000, allocation: 10, rateOverride: null },
-      { name: 'نیک ۳ ماهه / ۲۴ قسط', tDep: 3, tLoan: 24, alpha: 40, minBalance: 1_000_000, allocation: 15, rateOverride: null },
-      { name: 'نیک ۴ ماهه / ۱۲ قسط', tDep: 4, tLoan: 12, alpha: 110, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: 'نیک ۶ ماهه / ۳۶ قسط', tDep: 6, tLoan: 36, alpha: 60, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: 'نیک ۱۲ ماهه / ۱۲ قسط', tDep: 12, tLoan: 12, alpha: 320, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: 'نیک ۱۲ ماهه / ۶۰ قسط', tDep: 12, tLoan: 60, alpha: 60, minBalance: 1_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 27, minBalance: 1_000_000, allocation: 10, rateOverride: null },
+      { name: tierLabel(1), tDep: 3, tLoan: 24, alpha: 40, minBalance: 1_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(2), tDep: 4, tLoan: 12, alpha: 110, minBalance: 1_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(3), tDep: 6, tLoan: 36, alpha: 60, minBalance: 1_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(4), tDep: 12, tLoan: 12, alpha: 320, minBalance: 1_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(5), tDep: 12, tLoan: 60, alpha: 60, minBalance: 1_000_000, allocation: 15, rateOverride: null },
     ],
   },
   {
-    key: 'negin',
-    name: 'طرح نگین فراپویا',
-    bank: 'بانک سپه',
-    description:
-      'سپرده کوتاه‌مدت ماه‌شمار ویژه (با سود پرداختی ≈۲۰٫۵٪ سالانه) + تسهیلات مرابحه ۵ تا ۲۱٪؛ انتظار ۳ تا ۱۲ ماه؛ ضریب ۲۵ تا ۲۰۰٪؛ هر ماه انتظار اضافه = ۸ قسط بیشتر یا ۲۵٪ ضریب بیشتر یا ۲٪ نرخ کمتر.',
+    key: 'sample-3',
+    name: 'نمونه طرح سوم',
+    description: 'الگوی مرابحه با سود سپرده و نرخ‌های قابل تنظیم؛ مقادیر پیش‌فرض صرفاً برای شبیه‌سازی هستند.',
     contractType: 'murabaha',
     rate: 21,
     loanCap: 400_000_000,
     depositProfitRate: 20.5,
     tiers: [
-      { name: 'نگین پایه ۳ ماهه', tDep: 3, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: 'نگین ۶ ماهه — افزایش ضریب', tDep: 6, tLoan: 16, alpha: 100, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: 'نگین ۶ ماهه — افزایش اقساط', tDep: 6, tLoan: 40, alpha: 25, minBalance: 1_000_000, allocation: 15, rateOverride: null },
-      { name: 'نگین ۸ ماهه — کاهش نرخ', tDep: 8, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 15, rateOverride: 11 },
-      { name: 'نگین ۱۰ ماهه — حداکثر ضریب', tDep: 10, tLoan: 16, alpha: 200, minBalance: 1_000_000, allocation: 15, rateOverride: null },
-      { name: 'نگین ۱۲ ماهه — ترکیبی', tDep: 12, tLoan: 32, alpha: 200, minBalance: 1_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(0), tDep: 3, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(1), tDep: 6, tLoan: 16, alpha: 100, minBalance: 1_000_000, allocation: 20, rateOverride: null },
+      { name: tierLabel(2), tDep: 6, tLoan: 40, alpha: 25, minBalance: 1_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(3), tDep: 8, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 15, rateOverride: 11 },
+      { name: tierLabel(4), tDep: 10, tLoan: 16, alpha: 200, minBalance: 1_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(5), tDep: 12, tLoan: 32, alpha: 200, minBalance: 1_000_000, allocation: 15, rateOverride: null },
     ],
   },
 ];
 
-export const DEFAULT_PRESET = 'nikvam';
+export const DEFAULT_PRESET = 'sample-2';
 
 export function presetTiers(key: string): Tier[] {
   const p = PRESETS.find((x) => x.key === key) ?? PRESETS[0];
-  return p.tiers.map((t) => ({ ...t, id: uid() }));
+  return labelTiers(p.tiers.map((t) => ({ ...t, id: uid() })));
 }
 
 export const DEFAULT_CONFIG: GlobalConfig = {
