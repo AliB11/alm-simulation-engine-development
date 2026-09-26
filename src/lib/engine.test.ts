@@ -244,6 +244,32 @@ describe('ALM engine robustness and internal consistency', () => {
     assert.ok(Number.isFinite(normal.kpis.leverage) && normal.kpis.leverage > 0);
   });
 
+  it('reports a signed infinite margin ratio instead of a reassuring zero', () => {
+    // RR = ۱۰۰٪ ⇒ منابع ورودی خالص صفر است، اما طرح همچنان زیان می‌سازد
+    const squeezed = simulate({ ...input, config: { ...config, reserveRatio: 100 } });
+    assert.equal(squeezed.kpis.netDeposit, 0);
+    assert.ok(squeezed.kpis.netMargin < 0, `expected a loss, got ${squeezed.kpis.netMargin}`);
+    assert.equal(
+      squeezed.kpis.marginOnNetDeposit,
+      -Infinity,
+      'a losing design with no net resources must not read as break-even (0%)',
+    );
+
+    // همین حالت اما با حاشیهٔ مثبت: بی‌نهایت باید علامت مثبت داشته باشد
+    const profitable = simulate({
+      ...input,
+      config: { ...config, reserveRatio: 100, interbankRate: 0 },
+      behavior: { ...behavior, runoffRate: 0, churnRate: 0 },
+    });
+    assert.equal(profitable.kpis.netDeposit, 0);
+    assert.ok(profitable.kpis.netMargin > 0);
+    assert.equal(profitable.kpis.marginOnNetDeposit, Infinity);
+
+    // بدون منابع و بدون جریان، نسبت واقعاً تعریف‌نشده و خنثی است
+    const idle = simulate({ ...input, behavior: { ...behavior, totalDeposit: 0 } });
+    assert.equal(idle.kpis.marginOnNetDeposit, 0);
+  });
+
   it('closes the loan book exactly once every installment is collected', () => {
     const closed = simulate({ ...input, config: { ...config, horizon: 12 }, tiers: [{ ...tier, tDep: 1, tLoan: 6 }] });
     assert.equal(closed.rows[12].loanBook, 0);

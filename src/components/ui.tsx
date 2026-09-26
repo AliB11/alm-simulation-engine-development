@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -191,10 +190,17 @@ export function NumField({
   const inputRef = useRef<HTMLInputElement>(null);
   const caret = useRef<number | null>(null);
 
-  useEffect(() => {
+  /* همگام‌سازی مقدار بیرونی با متن فیلد.
+     به‌جای effect (که یک رندر آبشاری اضافه می‌کند) از الگوی «تنظیم حالت در
+     همان رندر» استفاده می‌شود: کلید همگام‌سازی فقط وقتی عوض می‌شود که مقدار،
+     مقیاس واحد پول یا تعداد اعشار واقعاً تغییر کرده باشد، و تا وقتی کاربر
+     داخل فیلد است متن تایپ‌شده بازنویسی نمی‌شود. */
+  const syncKey = `${focused}|${value}|${scale}|${decimals}|${money}`;
+  const [lastSync, setLastSync] = useState(syncKey);
+  if (syncKey !== lastSync) {
+    setLastSync(syncKey);
     if (!focused) setText(format(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, focused, scale, decimals]);
+  }
 
   useLayoutEffect(() => {
     const el = inputRef.current;

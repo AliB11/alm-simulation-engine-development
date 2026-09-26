@@ -6,7 +6,7 @@ on:
 
 jobs:
   verify:
-    name: typecheck, test, build
+    name: lint, typecheck, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,6 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -28,3 +29,26 @@ jobs:
             echo "Vazirmatn was not inlined into dist/index.html" >&2
             exit 1
           fi
+          # هیچ منبع بیرونی‌ای نباید بارگذاری شود (XML namespace و نشانی‌های
+          # داخل رشته‌های خطای React درخواست شبکه نیستند، پس الگوها دقیق‌اند)
+          for pattern in 'src="http' "src='http" 'href="http' "href='http" '@import' 'url(http'; do
+            if grep -qF "$pattern" dist/index.html; then
+              echo "production build loads an external resource: $pattern" >&2
+              exit 1
+            fi
+          done
+      - name: every mounted section is reachable from the nav
+        run: |
+          node --input-type=module -e "
+            import { readFileSync } from 'node:fs';
+            const app = readFileSync('src/App.tsx', 'utf8');
+            const header = readFileSync('src/components/Header.tsx', 'utf8');
+            const ids = [...header.matchAll(/\{ id: '([a-z-]+)',/g)].map((m) => m[1]);
+            if (!ids.length) throw new Error('no nav entries found in Header.tsx');
+            const missing = ids.filter((id) => !new RegExp('id=\"' + id + '\"').test(app));
+            if (missing.length) {
+              console.error('nav anchors with no target section:', missing.join(', '));
+              process.exit(1);
+            }
+            console.log('nav anchors OK:', ids.join(', '));
+          "

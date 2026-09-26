@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegulatoryParams } from './regulatory';
-import { bucketSizeFor, computeRegulatory, DEFAULT_REGULATORY } from './regulatory';
+import { computeRegulatory, DEFAULT_REGULATORY } from './regulatory';
+import { bucketSizeFor, horizonOf } from './buckets';
 import { tierAttribution } from './attribution';
 import { tierColor } from './presets';
 import { EPS, simulate } from './engine';
@@ -29,7 +30,9 @@ describe('regulatory metrics — bucketing', () => {
   it('partitions the horizon exactly once', () => {
     const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
     const H = sampleTwoResult.rows.length;
-    assert.equal(reg.bucketSize, bucketSizeFor(H));
+    // اندازهٔ سطل از «افق» (آخرین ماه) گرفته می‌شود، نه از تعداد ردیف‌ها
+    assert.equal(reg.bucketSize, bucketSizeFor(horizonOf(sampleTwoResult.rows)));
+    assert.equal(horizonOf(sampleTwoResult.rows), H - 1);
     const firstMonth = sampleTwoResult.rows[0].t;
     const lastMonth = sampleTwoResult.rows[H - 1].t;
     let covered = 0;
@@ -140,7 +143,7 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
     assert.equal(zeroRsf.nsfr, null, 'division by zero RSF must stay undefined');
   });
 
-  it('computes WAL from the actual principal and withdrawal profiles', () => {
+  it('computes WAL from the actual principal and liability-outflow profiles', () => {
     const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
     const H = sampleTwoResult.rows.length;
     let wIn = 0;
@@ -150,8 +153,10 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
     for (const row of sampleTwoResult.rows) {
       wIn += row.t * Math.max(0, row.principalIn);
       tIn += Math.max(0, row.principalIn);
-      wOut += row.t * Math.max(0, row.withdrawalOut);
-      tOut += Math.max(0, row.withdrawalOut);
+      // سمت تعهد همان خروجی نردبان است: برداشت اصل + سود پرداختی سپرده
+      const liabilityOutflow = Math.max(0, row.withdrawalOut) + Math.max(0, row.profitPaid);
+      wOut += row.t * liabilityOutflow;
+      tOut += liabilityOutflow;
     }
     const lastRow = sampleTwoResult.rows[H - 1];
     const surviving = lastRow.depositBalance;
@@ -163,6 +168,35 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
     assert.ok(reg.walAssets! >= 0 && reg.walAssets! <= lastRow.t);
     assert.ok(reg.walLiabilities! >= 0 && reg.walLiabilities! <= lastRow.t);
     assert.ok(near(reg.depositSurvival, surviving, 1e-12));
+  });
+
+  it('weights deposit profit into the liability WAL, like the ladder does', () => {
+    const paying = computeRegulatory(sampleThreeResult.rows, DEFAULT_REGULATORY);
+    const profit = sampleThreeResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0);
+    assert.ok(profit > 0, 'sampleThree pays deposit profit');
+
+    let wOut = 0;
+    let tOut = 0;
+    for (const row of sampleThreeResult.rows) {
+      const outflow = Math.max(0, row.withdrawalOut) + Math.max(0, row.profitPaid);
+      wOut += row.t * outflow;
+      tOut += outflow;
+    }
+    const last = sampleThreeResult.rows[sampleThreeResult.rows.length - 1];
+    wOut += last.t * last.depositBalance;
+    tOut += last.depositBalance;
+    assert.ok(near(paying.walLiabilities!, wOut / tOut, 1e-9));
+
+    // اگر سود سپرده کنار گذاشته شود، عمر تعهدات کوتاه‌تر و شکاف سررسید بزرگ‌تر می‌شود
+    let wWd = 0;
+    let tWd = 0;
+    for (const row of sampleThreeResult.rows) {
+      wWd += row.t * Math.max(0, row.withdrawalOut);
+      tWd += Math.max(0, row.withdrawalOut);
+    }
+    wWd += last.t * last.depositBalance;
+    tWd += last.depositBalance;
+    assert.ok(paying.walLiabilities! > wWd / tWd, 'ignoring profit understates liability duration');
   });
 
   it('aggregates the ladder exactly from the cash-flow matrix', () => {
@@ -261,7 +295,9 @@ describe('tier attribution — analytic removal of a tier', () => {
   it('builds a heat matrix that adds up to the tier outflows', () => {
     const attr = tierAttribution(sampleTwoResult.rows, tierColor);
     const H = sampleTwoResult.rows.length;
-    assert.equal(attr.heat.bucketSize, bucketSizeFor(H));
+    assert.equal(attr.heat.bucketSize, bucketSizeFor(horizonOf(sampleTwoResult.rows)));
+    // نقشهٔ حرارتی و نردبان سررسید باید روی یک شبکهٔ زمانی باشند
+    assert.equal(attr.heat.bucketSize, computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY).bucketSize);
     assert.equal(attr.heat.bucketLabels.length, Math.ceil(H / attr.heat.bucketSize));
     assert.equal(attr.heat.cells.length, attr.tiers.length);
     for (const row of attr.heat.cells) assert.equal(row.length, attr.heat.bucketLabels.length);

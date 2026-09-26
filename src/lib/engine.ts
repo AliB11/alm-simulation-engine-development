@@ -554,7 +554,17 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     totalProfitPaid,
     netInterestIncome: totalIncomeInHorizon - totalProfitPaid,
     netMargin: cumMargin,
-    marginOnNetDeposit: netDeposit > EPS ? cumMargin / netDeposit : cumMargin > EPS ? Infinity : 0,
+    /* حاشیه به درصد منابع ورودی خالص. وقتی مخرج صفر است (مثلاً RR = ۱۰۰٪)
+       عدد صفر «سر‌به‌سر» به نظر می‌رسد در حالی که طرح می‌تواند ده‌ها میلیارد
+       زیان داشته باشد؛ پس مانند اهرم خروج، علامت بی‌نهایت حفظ می‌شود. */
+    marginOnNetDeposit:
+      netDeposit > EPS
+        ? cumMargin / netDeposit
+        : cumMargin > EPS
+          ? Infinity
+          : cumMargin < -EPS
+            ? -Infinity
+            : 0,
   };
 
   return { rows, tiers: tierResults, kpis, vintages };

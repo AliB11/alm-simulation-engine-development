@@ -6,7 +6,9 @@
  *            تقسیم بر خروج استرس‌شدهٔ همان ماه
  *   • NSFR — نسبت خالص تأمین مالی پایدار در ماه m: منابع پایدار (سپرده ×
  *            ضریب پایداری) تقسیم بر دارایی‌های نیازمند تأمین (وام × ضریب)
- *   • WAL  — میانگین وزنی عمر دارایی‌ها و تعهدات و «شکاف سررسید»
+ *   • WAL  — میانگین وزنی عمر دارایی‌ها و تعهدات و «شکاف سررسید». سمت
+ *            تعهدات روی همان خروجی نردبان (برداشت + سود پرداختی سپرده +
+ *            ماندهٔ زنده در افق) وزن می‌شود تا با نمودار نردبان هم‌خوان باشد
  *
  *  همهٔ ضرایب، ورودی کاربرند و در کد ثابت نشده‌اند. این سنجه‌ها جایگزین
  *  محاسبات رسمی ناظر نیستند؛ برای مقایسهٔ طرح‌ها طراحی شده‌اند.
@@ -14,6 +16,7 @@
 
 import type { MonthRow } from '../types';
 import { bounded, EPS, finite } from './engine';
+import { bucketCountFor, bucketSizeForRows } from './buckets';
 
 export interface RegulatoryParams {
   /** درصد اضافی از ماندهٔ سپرده که در سناریوی استرس خارج فرض می‌شود (LCR) */
@@ -73,7 +76,9 @@ export interface Regulatory {
   nsfrMonth: number;
   asf: number;
   rsf: number;
+  /** میانگین وزنی عمر دارایی‌ها بر پایهٔ بازگشت اصل سرمایه */
   walAssets: number | null;
+  /** میانگین وزنی عمر تعهدات بر پایهٔ خروجی سمت تعهد (برداشت + سود سپرده + ماندهٔ زندهٔ افق) */
   walLiabilities: number | null;
   maturityGap: number | null;
   recoveryRate: number | null;
@@ -81,14 +86,6 @@ export interface Regulatory {
   ladder: LadderRow[];
   buckets: LadderBucket[];
   bucketSize: number;
-}
-
-export function bucketSizeFor(horizon: number): number {
-  const H = Math.round(finite(horizon, 60));
-  if (H <= 24) return 1;
-  if (H <= 60) return 3;
-  if (H <= 180) return 6;
-  return 12;
 }
 
 /** ورودی اصل سرمایه در ماه t — پولی که از دارایی وام برمی‌گردد */
@@ -154,8 +151,13 @@ export function computeRegulatory(rows: MonthRow[], params: RegulatoryParams): R
     inflowTotal += inflow;
     returnedTotal += inflow;
     disbursedTotal += finite(row.loanOut, 0);
-    outflowWeighted += row.t * withdrawal;
-    outflowTotal += withdrawal;
+    // WAL تعهدات روی همان «خروجی سمت تعهد» نردبان وزن می‌شود (برداشت + سود
+    // پرداختی). اگر سود سپرده از این میانگین کنار گذاشته شود، عمر تعهدات و در
+    // نتیجه شکاف سررسید با نمودار نردبانی که درست بالای همین عدد رسم می‌شود
+    // ناسازگار می‌شود — در طرح‌های دارای سود سپرده (نمونهٔ سوم) این اختلاف
+    // تقریباً یک ماه است.
+    outflowWeighted += row.t * outflow;
+    outflowTotal += outflow;
   }
 
   // ماندهٔ سپرده‌ای که تا افق زنده مانده، به‌عنوان تعهدی با سررسید باز در آخرین ماه لحاظ می‌شود
@@ -169,9 +171,13 @@ export function computeRegulatory(rows: MonthRow[], params: RegulatoryParams): R
   const recoveryRate = disbursedTotal > EPS ? returnedTotal / disbursedTotal : null;
 
   /* ----------------------------- سطل‌بندی ---------------------------- */
-  const size = bucketSizeFor(H);
+  // اندازهٔ سطل از «افق» (شمارهٔ آخرین ماه) گرفته می‌شود، نه از تعداد ردیف‌ها.
+  // ردیف‌ها از ماه صفر شروع می‌شوند، پس H = horizon + 1 است و استفاده از آن
+  // مرزهای جدول را یک ماه جابه‌جا می‌کرد (مثلاً افق ۶۰ ماهه سطل ۶ ماهه
+  // می‌گرفت در حالی که قاعدهٔ مستند سطل ۳ ماهه است).
+  const size = bucketSizeForRows(rows);
   const buckets: LadderBucket[] = [];
-  const count = Math.ceil(H / size);
+  const count = bucketCountFor(H, size);
   let bucketCum = 0;
   for (let i = 0; i < count; i++) {
     // سطل‌ها روی «اندیس ردیف» بریده می‌شوند و برچسبشان ماه واقعی ردیف‌هاست

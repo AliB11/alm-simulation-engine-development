@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -137,41 +137,44 @@ function HistTooltip({
   );
 }
 
+/** آنچه یک اجرا بر مبنای آن انجام شده — برای سنجش کهنه بودن نتیجه */
+interface RunSnapshot {
+  summary: McSummary;
+  input: SimInput;
+  opts: McOptions;
+}
+
 export function MonteCarloPanel({ input, onLoadRun }: Props) {
   const { dark, factor, unit } = useDisplay();
   const [opts, setOpts] = useState<McOptions>(DEFAULT_MC);
-  const [summary, setSummary] = useState<McSummary | null>(null);
+  const [run, setRun] = useState<RunSnapshot | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [running, setRunning] = useState(false);
-  const [stale, setStale] = useState(false);
   const [metric, setMetric] = useState<McMetric>('maxHole');
   const cancelRef = useRef(false);
 
-  useEffect(() => setStale(true), [input]);
+  /* پرچم «ورودی تغییر کرد» در رندر از روی هویت ورودی‌های همان اجرا derive
+     می‌شود؛ نیازی به effect و setState آبشاری نیست. */
+  const stale = run !== null && (run.input !== input || run.opts !== opts);
+  const summary = run?.summary ?? null;
 
   const patch = useCallback((p: Partial<McOptions>) => {
     setOpts((o) => ({ ...o, ...p }));
-    setStale(true);
   }, []);
 
-  const toggleKey = useCallback(
-    (key: StochasticKey) => {
-      setOpts((o) => ({ ...o, stochastic: { ...o.stochastic, [key]: !o.stochastic[key] } }));
-      setStale(true);
-    },
-    [],
-  );
+  const toggleKey = useCallback((key: StochasticKey) => {
+    setOpts((o) => ({ ...o, stochastic: { ...o.stochastic, [key]: !o.stochastic[key] } }));
+  }, []);
 
-  const run = useCallback(async () => {
+  const execute = useCallback(async () => {
     cancelRef.current = false;
     setRunning(true);
     setProgress({ done: 0, total: Math.round(opts.runs) });
     await new Promise((r) => setTimeout(r, 24));
     const res = await runMonteCarlo(input, opts, setProgress, () => cancelRef.current);
-    setSummary(res);
+    setRun({ summary: res, input, opts });
     setRunning(false);
     setProgress(null);
-    setStale(false);
   }, [input, opts]);
 
   const stop = useCallback(() => {
@@ -279,7 +282,7 @@ export function MonteCarloPanel({ input, onLoadRun }: Props) {
                 توقف
               </Button>
             ) : (
-              <Button size="sm" variant="primary" onClick={run} disabled={!input.tiers.length}>
+              <Button size="sm" variant="primary" onClick={execute} disabled={!input.tiers.length}>
                 <Play />
                 اجرای آزمون
               </Button>
@@ -344,10 +347,7 @@ export function MonteCarloPanel({ input, onLoadRun }: Props) {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  setOpts(DEFAULT_MC);
-                  setStale(true);
-                }}
+                onClick={() => setOpts(DEFAULT_MC)}
               >
                 <RotateCcw />
                 بازنشانی تنظیمات آزمون

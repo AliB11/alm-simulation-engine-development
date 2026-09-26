@@ -27,8 +27,17 @@
 - **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two of 8 risk variables
   (take-up, approval, runoff, churn, reserve ratio, α scale, price, deposit profit) × 5 metrics
   (max hole, tipping point, end balance, leverage, net margin).
+- **Tornado risk-driver ranking** — one-at-a-time shocks over the same stress grid, sorted by swing, so the heatmap's
+  "which two interact" question is complemented by "which lever matters most".
+- **Monthly cash-flow matrix with event drill-down** — every month expands into its per-tier / per-vintage transactions
+  (deposit, legal reserve, installments, disbursement, withdrawal, deposit profit) with a live `NCF → CumLiq` trace.
+- **Scenario slots A / B / C** — snapshot the whole design, keep editing, and compare KPIs, config diffs and overlapping
+  liquidity paths side by side; slots survive a page reload.
 - **Customer loan calculator** — enter an average deposit balance, waiting period and repayment term to estimate eligibility, loan amount, monthly payment and total repayment using the active product rules.
-- **Cash-flow CSV export** — download the modeled monthly matrix from the toolbar when a detailed review is needed.
+- **Per-tier customer comparison** — the same deposit priced against every tier: loan, installment, ROI, effective annual
+  rate (IRR) and the customer's real cost after the opportunity cost of waiting.
+- **Cash-flow CSV + general-ledger CSV export** — the monthly matrix, or one signed row per tier/vintage event that
+  reconciles exactly to `CumLiq(H)` for Excel / BI review.
 - **Inverse tier designer** — coordinate search over α scale, waiting period, repayment and allocation tilt, subject to
   liquidity, leverage and margin constraints, with one-click apply.
 - **Monte Carlo / VaR** — seeded, reproducible draws of behavioral inputs; P(tipping), P(loss), P5–P99 and load-worst-run.
@@ -39,7 +48,8 @@
 - **Methodology panel** — every formula shown with live-substituted values.
 - **Toman / Rial toggle, dark / light theme, localStorage persistence, JSON scenario import/export.**
 - **Offline Persian font** — Vazirmatn is bundled (OFL-1.1); the single-file build does not call Google Fonts.
-- **Golden-number tests + CI** — the three sample profiles are frozen to the rial, and GitHub Actions runs typecheck, tests and build.
+- **Golden-number tests + CI** — the three sample profiles are frozen to the rial, and GitHub Actions runs lint,
+  typecheck, tests and build, plus a server-render smoke test of every section and an orphan-component guard.
 
 ---
 
@@ -72,6 +82,8 @@
 - حداکثر کسری (Max Liquidity Hole): `min_t (CumLiq_t)`
 - هزینه پوشش کسری: `Σ_t max(0, −CumLiq_t) × r_ib / 12`
 - اهرم خروج: `(Σ Commitment + Σ Withdrawal) / (D × (1 − RR))` — اگر مخرج صفر و صورت مثبت باشد، `∞` (نه `0×`)
+- حاشیه به درصد منابع خالص: `Margin / (D × (1 − RR))` — با همان قاعدهٔ علامت: اگر مخرج صفر باشد `±∞` برمی‌گردد،
+  چون عدد صفر در این حالت به‌اشتباه «سر‌به‌سر» خوانده می‌شود در حالی که طرح می‌تواند زیان‌ده باشد
 
 ### هـ) صورت سود و زیان شبیه‌سازی‌شده
 
@@ -88,7 +100,18 @@
 - `LCR_t = max(0, CumLiq_t) / (Outflow_t + ω × DepositBalance_t) × 100` — ماه بدون خروج، پوشش نامحدود (`∞`) است و از کمینه کنار گذاشته می‌شود
 - `NSFR_m = (DepositBalance_m × w) / (LoanBook_m × r) × 100` با `m = 12` (یا آخرین ماه، اگر افق کوتاه‌تر باشد)
 - `WAL = Σ t × Flow_t / Σ Flow_t` و `Gap = WAL(دارایی) − WAL(تعهدات)`
+- سمت دارایی روی بازگشت اصل سرمایه و سمت تعهد روی **همان خروجی نردبان** (`برداشت + سود پرداختی سپرده`) وزن می‌شود؛
+  کنار گذاشتن سود سپرده، عمر تعهدات را کوتاه‌تر و شکاف سررسید را بزرگ‌تر از واقع نشان می‌داد
 - ماندهٔ سپرده‌ای که تا پایان افق زنده می‌ماند، در WAL تعهدات با سررسید بازِ آخرین ماه لحاظ می‌شود
+- سطل‌بندی زمانی نردبان و نقشهٔ حرارتی از یک قاعدهٔ مشترک پیروی می‌کند و اندازه‌اش از **افق** (شمارهٔ آخرین ماه)
+  گرفته می‌شود نه از تعداد ردیف‌ها: `≤ ۲۴ → ۱ ماهه`، `≤ ۶۰ → ۳ ماهه`، `≤ ۱۸۰ → ۶ ماهه`، بیشتر → `۱۲ ماهه`
+
+### و-۲) نمودار گردبادی (حساسیت تک‌متغیره)
+
+- هر متغیر ریسک به‌تنهایی بین دو کران **همان شبکهٔ آزمون بحران** تکان داده می‌شود و بقیه ثابت می‌ماند
+- `swing_k = max(metric_low , metric_high , metric_base) − min(...)` و میله‌ها نزولی بر پایهٔ `swing` مرتب می‌شوند
+- «واژگونی ندارد» به‌جای `null` با `H + 1` جایگزین می‌شود تا امن‌ترین حالت بزرگ‌ترین عدد باشد
+- اهرم خروج برای نمایش در `۱۰۰×` سقف می‌گیرد تا یک خانهٔ `∞` مقیاس کل نمودار را نخورد
 
 ### ز) انتساب حفره به پله‌ها
 
@@ -128,15 +151,33 @@ npm run dev
 # 3) production build (outputs a single self-contained dist/index.html)
 npm run build
 
-# 4) typecheck and regression tests (same commands CI runs)
-npm run typecheck
-npm test
+# 4) the same checks CI runs
+npm run lint        # ESLint (typescript-eslint + react-hooks)
+npm run typecheck   # tsc --noEmit
+npm test            # node --test through tsx: engine, golden numbers, UI smoke
+npm run verify      # lint + typecheck + test + build in one go
 
 # 5) preview the production build
 npm run preview
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the test suite and the production build on every push and pull request, and fails if the single-file build still references Google Fonts or failed to inline Vazirmatn.
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, the test suite and the production build on every push
+and pull request. It then fails if the single-file build references any external resource (font, script, stylesheet or
+`@import`), or if a navigation anchor in the header points at a section that does not exist.
+
+### Test layout / چیدمان آزمون‌ها
+
+| File | What it freezes |
+| ---- | --------------- |
+| `src/lib/golden.test.ts` | The KPI set of the three sample profiles, rounded to the rial |
+| `src/lib/engine.test.ts` | Amortization, drain rules, NaN hygiene, `∞` conventions, simulated P&L |
+| `src/lib/buckets.test.ts` | The shared time-bucket rule used by the ladder **and** the heat map |
+| `src/lib/tornado.test.ts` | One-at-a-time shocks stay consistent with the 2-D stress grid |
+| `src/lib/regulatory.test.ts` | LCR / NSFR / WAL proxies and analytic tier attribution |
+| `src/lib/monteCarlo.test.ts` | Seeded reproducibility, intensity 0 ⇒ the deterministic engine |
+| `src/lib/optimizer.test.ts` | Feasibility outranks the objective; ties prefer the current design |
+| `src/lib/io.test.ts` | Sanitizing hostile imports and the CSV / JSON writers |
+| `src/components/render.test.tsx` | Server-renders every section (both currencies, both themes), asserts no `NaN` leaks, and fails if a component is never mounted |
 
 ---
 
@@ -150,6 +191,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the test suite and t
 | Charts     | Recharts 3                                   |
 | Icons      | lucide-react                                 |
 | Font       | Vazirmatn variable, self-hosted (OFL-1.1)    |
+| Quality    | ESLint 10 + typescript-eslint + react-hooks  |
+| Tests      | `node --test` via tsx (no test framework)    |
 
 ---
 
@@ -164,8 +207,10 @@ src/
 │   ├── engine.ts              # ★ Core simulation engine (PMT, vintage matrix, KPIs, IRR, sensitivity)
 │   ├── optimizer.ts           # Inverse tier designer (coordinate descent)
 │   ├── monteCarlo.ts          # Seeded Monte Carlo / VaR
-│   ├── regulatory.ts          # LCR / NSFR / WAL proxies + maturity buckets
+│   ├── regulatory.ts          # LCR / NSFR / WAL proxies + maturity ladder
 │   ├── attribution.ts         # Analytic tier attribution of the liquidity hole
+│   ├── tornado.ts             # One-at-a-time sensitivity / risk-driver ranking
+│   ├── buckets.ts             # ★ Single source of truth for time-bucket sizing
 │   ├── scenarios.ts           # Scenario slot model + KPI comparison rows
 │   ├── format.ts              # Persian-digit number/percent/money formatting & parsing
 │   ├── presets.ts             # Default config + 3 editable sample profiles
@@ -173,7 +218,7 @@ src/
 │   ├── eventMeta.ts           # Single source of truth for cash-flow event signs
 │   ├── io.ts                  # localStorage, matrix/ledger CSV, JSON, scenario slots
 │   ├── golden.test.ts         # Frozen KPI numbers for the three sample profiles
-│   └── *.test.ts              # Engine, optimizer, Monte Carlo, regulatory, import regressions
+│   └── *.test.ts              # Engine, buckets, tornado, optimizer, Monte Carlo, regulatory, imports
 └── components/
     ├── ui.tsx                 # Reusable primitives (Card, NumField, Slider, Segmented, …)
     ├── Header.tsx             # Sticky nav + live risk chips + actions
@@ -182,14 +227,19 @@ src/
     ├── CommitmentPanel.tsx    # §3 Manual resources + behavioral sliders
     ├── KpiBoard.tsx           # §3 KPI cards + risk banner + commitment table
     ├── ProfitLossPanel.tsx    # §3 Simulated P&L (income / deposit profit / funding cost / net margin)
+    ├── CashFlowTable.tsx      # §3 Monthly matrix with per-tier/per-vintage event drill-down
     ├── LiquidityCharts.tsx    # §4 Liquidity risk charts
     ├── SensitivityPanel.tsx   # §4-b 2-D stress heatmap
+    ├── TornadoPanel.tsx       # §4-b Tornado ranking of risk drivers
     ├── MonteCarloPanel.tsx    # §4-c Monte Carlo / VaR
     ├── OptimizerPanel.tsx     # §4-c Inverse tier designer
     ├── RegulatoryPanel.tsx    # §4-d LCR / NSFR / maturity-gap proxies
     ├── MaturityLadder.tsx     # §4-d Maturity ladder + tier attribution
+    ├── ScenarioCompare.tsx    # §4-e Scenario slots A/B/C, KPI diff and overlapping paths
     ├── CustomerCalculator.tsx # §5 Customer loan and installment estimate
-    └── Methodology.tsx        # Appendix: live formula trace
+    ├── TierComparison.tsx     # §5 Same deposit priced against every tier (ROI / IRR)
+    ├── Methodology.tsx        # Appendix: live formula trace
+    └── render.test.tsx        # Server-render smoke test + orphan-component guard
 ```
 
 ---
@@ -215,6 +265,19 @@ src/
 - **الگوهای نمونه**: اعداد صرفاً برای نمایش رفتار مدل انتخاب شده‌اند، به مؤسسهٔ مشخصی وابستگی ندارند و پیشنهاد تسهیلات محسوب نمی‌شوند.
 - **اعداد طلایی**: `src/lib/golden.test.ts` سنجه‌های سه الگوی نمونه را با ورودی‌های پیش‌فرض، در سطح ریال گرد‌شده، فریز کرده است. هر تغییری که این اعداد را جابه‌جا کند باید آگاهانه و همراه با به‌روزرسانی همان فایل باشد.
 - **سنجه‌های LCR/NSFR**: تقریب آموزشی برای مقایسهٔ طرح‌ها هستند و تعریف کمیتهٔ بال یا الزام ناظر داخلی را پیاده نمی‌کنند. همهٔ ضرایب‌شان از رابط کاربری می‌آید و با سناریو ذخیره می‌شود.
+- **شکاف سررسید (WAL)**: سمت تعهدات روی همان خروجی نردبان (`برداشت + سود پرداختی سپرده + ماندهٔ زندهٔ افق`) وزن می‌شود.
+  پیش‌تر سود سپرده از این میانگین کنار گذاشته می‌شد و در طرح‌های دارای سود (نمونهٔ سوم) عمر تعهدات حدود یک ماه کوتاه‌تر
+  و شکاف سررسید بزرگ‌تر از نمودارِ همان کارت نشان داده می‌شد.
+- **اندازهٔ سطل زمانی**: یک قاعدهٔ مشترک در `src/lib/buckets.ts` برای نردبان سررسید و نقشهٔ حرارتی، بر پایهٔ **افق**
+  (شمارهٔ آخرین ماه) و نه تعداد ردیف‌ها. ردیف‌های موتور از ماه صفر شروع می‌شوند، پس استفاده از تعداد ردیف‌ها مرزها را
+  یک ماه جابه‌جا می‌کرد و افق پیش‌فرض ۶۰ ماهه به‌جای سطل ۳ ماهه، سطل ۶ ماهه می‌گرفت.
+- **اهرم ∞ و حاشیهٔ ∞**: هر دو نسبت، وقتی مخرجشان صفر می‌شود، بی‌نهایت **با علامت** برمی‌گردانند. عدد صفر در این حالت
+  «ایمن» یا «سر‌به‌سر» به نظر می‌رسید در حالی که طرح می‌تواند کاملاً زیان‌ده باشد.
+- **نمودار گردبادی**: کران‌های هر محرک دقیقاً همان مقادیر شبکهٔ آزمون بحران‌اند، پس نتیجهٔ آن با خانه‌های ماتریس
+  دوبعدی سازگار است و هیچ عدد تازه‌ای به مدل اضافه نمی‌کند. اثر تعاملی دو متغیر در این نمودار دیده نمی‌شود.
+- **جایگاه‌های سناریو (A/B/C)**: سنجه‌های جدول در لحظهٔ نمایش با موتور **بازمحاسبه** می‌شوند، نه از عکس لحظهٔ ذخیره؛
+  پس پس از تغییر موتور، مقایسهٔ سناریوهای قدیمی هم با نسخهٔ جاری سازگار می‌ماند. ضرایب LCR/NSFR تنظیمات تحلیل‌اند و
+  با تعویض سناریو عوض نمی‌شوند.
 - **بهینه‌یاب**: جست‌وجوی مختصاتی است، نه تضمین بهینهٔ سراسری. اگر هیچ طرحی همهٔ قیدها را برآورده نکند، کم‌نقض‌ترین طرح نشان داده می‌شود و دکمهٔ اعمال تا اجرای مجدد (پس از تغییر ورودی) غیرفعال می‌ماند.
 - **مونت‌کارلو**: مقیاس توزیع‌ها تعریف خود لغزندهٔ «شدت» است (در شدت ۱۰۰٪، σ نرخ‌ها ۲۰ واحد درصد و σ لگاریتمی حجم منابع ۲۵٪). شدت صفر اجرا را دقیقاً به شبیه‌سازی قطعی برمی‌گرداند.
 - **فونت**: وزیرمتن متغیر به‌صورت محلی بسته‌بندی شده (مجوز OFL-1.1 در `src/assets/fonts/OFL.txt`) و در خروجی تک‌فایل درون‌خط می‌شود؛ برنامه برای نمایش فارسی به اینترنت نیاز ندارد.
