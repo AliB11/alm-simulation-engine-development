@@ -194,7 +194,12 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
             <Money compact value={k.netMargin} />
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
-            {Number.isFinite(k.marginOnNetDeposit) ? fmtPct(k.marginOnNetDeposit * 100, 2) : '∞'} از منابع ورودی خالص
+            {Number.isFinite(k.marginOnNetDeposit)
+              ? fmtPct(k.marginOnNetDeposit * 100, 2)
+              : k.marginOnNetDeposit < 0
+                ? '−∞'
+                : '∞'}{' '}
+            از منابع ورودی خالص
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   BadgeCheck,
   CircleSlash2,
@@ -86,29 +86,39 @@ function LeverChips({ cand }: { cand: CandidateDesign }) {
  * کاربر هدف و قیدها را مشخص می‌کند و موتور با جست‌وجوی مختصاتی روی چهار
  * اهرم طراحی، بهترین ترکیب را یافته و طرح‌های برتر را رتبه‌بندی می‌کند.
  */
+/** آنچه یک اجرا بر مبنای آن انجام شده — برای سنجش کهنه بودن نتیجه */
+interface RunSnapshot {
+  result: OptimizationResult;
+  input: SimInput;
+  objective: Objective;
+  constraints: Constraints;
+}
+
 export function OptimizerPanel({ input, onApply }: Props) {
   const [objective, setObjective] = useState<Objective>('margin');
   const [constraints, setConstraints] = useState<Constraints>(DEFAULT_CONSTRAINTS);
-  const [result, setResult] = useState<OptimizationResult | null>(null);
+  const [run, setRun] = useState<RunSnapshot | null>(null);
   const [running, setRunning] = useState(false);
-  const [stale, setStale] = useState(false);
 
-  // نتیجه نسبت به پله‌ها و ورودی‌های لحظهٔ اجرا معتبر است؛ با عوض شدن آن‌ها اعمال غیرفعال می‌شود
-  useEffect(() => setStale(true), [input]);
+  /* نتیجه فقط نسبت به ورودی‌های لحظهٔ اجرا معتبر است. به‌جای یک effect که
+     پرچم «کهنه» را ست کند، همان پرچم در رندر از روی هویت ورودی‌های ذخیره‌شده
+    derive می‌شود — بدون رندر آبشاری و بدون حالت اضافی که بتواند واگرا شود. */
+  const stale =
+    run !== null &&
+    (run.input !== input || run.objective !== objective || run.constraints !== constraints);
+  const result = run?.result ?? null;
 
   const patch = useCallback((p: Partial<Constraints>) => {
     setConstraints((c) => ({ ...c, ...p }));
-    setStale(true);
   }, []);
 
-  const run = useCallback(async () => {
+  const execute = useCallback(async () => {
     setRunning(true);
     // یک نوبت رویداد تا نشانگر بارگذاری پیش از محاسبه رنگ شود
     await new Promise((r) => setTimeout(r, 24));
     const res = optimizeDesign(input, { objective, constraints, passes: 3, topN: 6 });
-    setResult(res);
+    setRun({ result: res, input, objective, constraints });
     setRunning(false);
-    setStale(false);
   }, [input, objective, constraints]);
 
   const base = result?.baseline.kpis ?? null;
@@ -128,7 +138,7 @@ export function OptimizerPanel({ input, onApply }: Props) {
                 ورودی تغییر کرد — اجرا مجدد
               </Badge>
             )}
-            <Button size="sm" variant="primary" onClick={run} disabled={running || !input.tiers.length}>
+            <Button size="sm" variant="primary" onClick={execute} disabled={running || !input.tiers.length}>
               {running ? <Loader2 className="animate-spin" /> : <Play />}
               {running ? 'در حال جست‌وجو…' : 'اجرای بهینه‌سازی'}
             </Button>
@@ -142,10 +152,7 @@ export function OptimizerPanel({ input, onApply }: Props) {
             <Segmented
               full
               value={objective}
-              onChange={(v) => {
-                setObjective(v);
-                setStale(true);
-              }}
+              onChange={setObjective}
               options={(Object.keys(OBJECTIVE_LABELS) as Objective[]).map((k) => ({
                 value: k,
                 label: OBJECTIVE_LABELS[k].label,

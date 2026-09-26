@@ -35,9 +35,9 @@ export function makeGaussian(rng: () => number): () => number {
       spare = null;
       return s;
     }
-    let u = 0;
-    let v = 0;
-    let s = 0;
+    let u: number;
+    let v: number;
+    let s: number;
     do {
       u = rng() * 2 - 1;
       v = rng() * 2 - 1;

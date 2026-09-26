@@ -24,8 +24,6 @@ export const EVENT_META: Record<EventType, EventMeta> = {
   profit: { label: 'سود پرداختی به سپرده‌گذاران', sign: -1, color: '#a855f7' },
 };
 
-export const EVENT_TYPES = Object.keys(EVENT_META) as EventType[];
-
 /** سهم این رویداد در خالص جریان نقد ماه (مقدار ذخیره‌شده همواره مثبت است) */
 export function eventNcf(type: EventType, amount: number): number {
   return EVENT_META[type].sign * amount;

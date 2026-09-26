@@ -6,6 +6,7 @@ import {
   Download,
   FileBraces,
   FlaskConical,
+  GitCompareArrows,
   Landmark,
   Layers,
   Moon,
@@ -14,6 +15,7 @@ import {
   ShieldCheck,
   SquareFunction,
   Sun,
+  Table2,
   TriangleAlert,
   Upload,
   Wallet,
@@ -23,14 +25,16 @@ import { fmtRatio, toFa } from '../lib/format';
 import { IconButton, Money, Segmented } from './ui';
 import { cn } from '../utils/cn';
 
-const NAV = [
+export const NAV = [
   { id: 'config', label: 'تنظیمات کلان', icon: Settings2 },
   { id: 'tiers', label: 'پله‌ها', icon: Layers },
   { id: 'commitments', label: 'منابع و تعهدات', icon: Wallet },
+  { id: 'cashflow', label: 'ماتریس گردش نقد', icon: Table2 },
   { id: 'charts', label: 'نمودارهای ریسک', icon: ChartArea },
-  { id: 'stress', label: 'آزمون حساسیت', icon: FlaskConical },
+  { id: 'stress', label: 'آزمون حساسیت و گردباد', icon: FlaskConical },
   { id: 'advanced', label: 'مونت‌کارلو و بهینه‌یاب', icon: Activity },
   { id: 'regulatory', label: 'سنجه‌های مقرراتی', icon: ShieldCheck },
+  { id: 'scenarios', label: 'مقایسهٔ سناریوها', icon: GitCompareArrows },
   { id: 'customer-calculator', label: 'محاسبه‌گر مشتری', icon: Calculator },
   { id: 'method', label: 'روش‌شناسی', icon: SquareFunction },
 ];

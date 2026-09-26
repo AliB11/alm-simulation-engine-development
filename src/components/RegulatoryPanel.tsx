@@ -1,18 +1,19 @@
 import { useMemo } from 'react';
 import { Area, CartesianGrid, ComposedChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertOctagon, CalendarRange, Droplets, Ruler, Scale, ShieldCheck } from 'lucide-react';
-import type { GlobalConfig, SimResult } from '../types';
-import { computeRegulatory, DEFAULT_REGULATORY, type RegulatoryParams } from '../lib/regulatory';
+import type { GlobalConfig } from '../types';
+import { DEFAULT_REGULATORY, type Regulatory, type RegulatoryParams } from '../lib/regulatory';
 import { fmtCompact, fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
 import { Badge, Card, CardHeader, Field, Money, SliderField } from './ui';
 import { cn } from '../utils/cn';
 
 interface Props {
-  result: SimResult;
   config: GlobalConfig;
   params: RegulatoryParams;
   onParams: (p: Partial<RegulatoryParams>) => void;
+  /** سنجه‌های محاسبه‌شده — در ریشهٔ برنامه یک‌بار حساب می‌شوند و با نردبان سررسید مشترک‌اند */
+  reg: Regulatory;
 }
 
 function Tile({
@@ -97,9 +98,8 @@ function ratioTone(v: number | null, threshold = 100): 'emerald' | 'amber' | 'ro
  * سنجه‌های مقرراتی‌مانند: LCR ماهانه، NSFR در ماه ۱۲ و شکاف سررسید (WAL).
  * همهٔ ضرایب ورودی کاربرند؛ این سنجه‌ها جایگزین محاسبات رسمی ناظر نیستند.
  */
-export function RegulatoryPanel({ result, config, params, onParams }: Props) {
+export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
   const { dark, factor } = useDisplay();
-  const reg = useMemo(() => computeRegulatory(result.rows, params), [result.rows, params]);
   const horizon = Math.round(config.horizon);
 
   const data = useMemo<LcrDatum[]>(

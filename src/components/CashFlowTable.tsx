@@ -26,20 +26,24 @@ function eventDetail(e: FlowEvent): string {
   return vin;
 }
 
-function EventsDetail({
-  row,
-  prevCum,
+/**
+ * فهرست رویدادهای یک سمت جریان نقد.
+ *
+ * عمداً در سطح ماژول تعریف شده است: اگر داخل `EventsDetail` ساخته شود، در هر
+ * رندر یک نوع کامپوننت تازه است و React کل زیردرخت آن را از نو mount می‌کند.
+ */
+function EventList({
+  items,
+  empty,
   fmt,
   rr,
 }: {
-  row: MonthRow;
-  prevCum: number;
+  items: FlowEvent[];
+  empty: string;
   fmt: (v: number) => string;
   rr: number;
 }) {
-  const inflows = row.events.filter((e) => EVENT_META[e.type].sign > 0 || e.type === 'reserve');
-  const outflows = row.events.filter((e) => e.type === 'loan' || e.type === 'withdrawal' || e.type === 'profit');
-  const List = ({ items, empty }: { items: FlowEvent[]; empty: string }) => (
+  return (
     <div className="space-y-1.5">
       {items.length === 0 && <div className="text-[11.5px] text-slate-400">{empty}</div>}
       {items.map((e, i) => {
@@ -74,17 +78,38 @@ function EventsDetail({
       })}
     </div>
   );
+}
+
+function EventsDetail({
+  row,
+  prevCum,
+  fmt,
+  rr,
+}: {
+  row: MonthRow;
+  prevCum: number;
+  fmt: (v: number) => string;
+  rr: number;
+}) {
+  const inflows = row.events.filter((e) => EVENT_META[e.type].sign > 0 || e.type === 'reserve');
+  const outflows = row.events.filter((e) => e.type === 'loan' || e.type === 'withdrawal' || e.type === 'profit');
 
   return (
     <div className="space-y-3 bg-slate-50/80 p-4 dark:bg-slate-950/40">
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
-          <div className="mb-2 text-[12px] font-bold text-emerald-700 dark:text-emerald-400">منابع ورودی نقد (Inflows)</div>
-          <List items={inflows} empty="ورودی نقدی در این ماه ثبت نشده است." />
+          <div className="mb-2 text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
+            منابع ورودی و کسر سپرده قانونی
+          </div>
+          <EventList items={inflows} empty="ورودی نقدی در این ماه ثبت نشده است." fmt={fmt} rr={rr} />
+          <div className="pt-1 text-[10.5px] leading-5 text-slate-400">
+            سپردهٔ قانونی از همان سپردهٔ جدید کسر می‌شود، نه یک خروجی جداگانه؛ پس در کنار ورودی‌ها و با علامت منفی
+            نمایش داده می‌شود تا «جمع ورودی» پایین دقیقاً همان <span dir="ltr">Inflow</span> موتور باشد.
+          </div>
         </div>
         <div>
           <div className="mb-2 text-[12px] font-bold text-rose-700 dark:text-rose-400">مصارف خروجی نقد (Outflows)</div>
-          <List items={outflows} empty="خروجی نقدی در این ماه ثبت نشده است." />
+          <EventList items={outflows} empty="خروجی نقدی در این ماه ثبت نشده است." fmt={fmt} rr={rr} />
         </div>
       </div>
       <div

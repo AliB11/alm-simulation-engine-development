@@ -1,5 +1,16 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Activity, Calculator, ChartArea, FlaskConical, Layers, Settings2, ShieldCheck, SquareFunction, Wallet } from 'lucide-react';
+import {
+  Activity,
+  Calculator,
+  ChartArea,
+  FlaskConical,
+  GitCompareArrows,
+  Layers,
+  Settings2,
+  ShieldCheck,
+  SquareFunction,
+  Wallet,
+} from 'lucide-react';
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, SimInput, Tier } from './types';
 import { DisplayContext, type DisplayState } from './context/display';
 import { simulate } from './lib/engine';
@@ -11,17 +22,23 @@ import {
   PRESETS,
   labelTiers,
   presetTiers,
+  tierColor,
 } from './lib/presets';
 import {
   clearState,
   exportCashFlowCsv,
   exportScenario,
+  loadSlots,
   loadState,
   sanitizeState,
+  saveSlots,
   saveState,
   THEME_KEY,
 } from './lib/io';
 import { DEFAULT_REGULATORY, type RegulatoryParams } from './lib/regulatory';
+import { computeRegulatory } from './lib/regulatory';
+import { tierAttribution } from './lib/attribution';
+import { snapshotSlot, type ScenarioSlots, type SlotId } from './lib/scenarios';
 import { Header } from './components/Header';
 import { SectionHeading } from './components/ui';
 import { GlobalConfigPanel } from './components/GlobalConfigPanel';
@@ -33,7 +50,11 @@ import { MonteCarloPanel } from './components/MonteCarloPanel';
 import { OptimizerPanel } from './components/OptimizerPanel';
 import { RegulatoryPanel } from './components/RegulatoryPanel';
 import { MaturityLadder } from './components/MaturityLadder';
+import { ScenarioCompare } from './components/ScenarioCompare';
+import { CashFlowTable } from './components/CashFlowTable';
+import { TornadoPanel } from './components/TornadoPanel';
 import { CustomerCalculator } from './components/CustomerCalculator';
+import { TierComparison } from './components/TierComparison';
 import { Methodology } from './components/Methodology';
 
 function initialDark(): boolean {
@@ -63,6 +84,7 @@ export default function App() {
     ...DEFAULT_REGULATORY,
     ...(saved?.regulatory ?? {}),
   }));
+  const [slots, setSlots] = useState<ScenarioSlots>(() => loadSlots());
   const [dark, setDark] = useState<boolean>(initialDark);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -81,6 +103,10 @@ export default function App() {
   }, [config, tiers, behavior, schedule, activePreset, currency, regulatory]);
 
   useEffect(() => {
+    saveSlots(slots);
+  }, [slots]);
+
+  useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 2600);
     return () => clearTimeout(id);
@@ -90,6 +116,12 @@ export default function App() {
   const input = useMemo<SimInput>(() => ({ config, tiers, behavior, schedule }), [config, tiers, behavior, schedule]);
   const result = useMemo(() => simulate(input, true), [input]);
   const deferredInput = useDeferredValue(input);
+
+  /* سنجه‌های مقرراتی و انتساب پله‌ها فقط به ماتریس نقدینگی و ضرایب تحلیل
+     بستگی دارند؛ یک‌بار اینجا محاسبه می‌شوند و بین دو کارت بخش ۴-ت مشترک‌اند
+     تا هر تغییر ورودی، آن‌ها را دوبار از نو نسازد. */
+  const reg = useMemo(() => computeRegulatory(result.rows, regulatory), [result.rows, regulatory]);
+  const attr = useMemo(() => tierAttribution(result.rows, tierColor), [result.rows]);
 
   const display = useMemo<DisplayState>(
     () => ({
@@ -162,6 +194,38 @@ export default function App() {
     [],
   );
 
+  /* ---- جایگاه‌های مقایسهٔ سناریو (A / B / C) ---- */
+  const snapshotToSlot = useCallback(
+    (id: SlotId) => {
+      setSlots((s) => ({ ...s, [id]: snapshotSlot(id, input, result.kpis) }));
+      setToast(`سناریوی جاری در جایگاه ${id} ذخیره شد`);
+    },
+    [input, result.kpis],
+  );
+
+  const loadSlot = useCallback(
+    (id: SlotId) => {
+      const slot = slots[id];
+      if (!slot) return;
+      setConfig(slot.config);
+      setTiersState(labelTiers(slot.tiers));
+      setBehavior(slot.behavior);
+      setSchedule(slot.schedule);
+      setActivePreset(null);
+      setToast(`«${slot.name}» در برنامه بارگذاری شد`);
+    },
+    [slots],
+  );
+
+  const clearSlot = useCallback((id: SlotId) => {
+    setSlots((s) => (s[id] ? { ...s, [id]: null } : s));
+    setToast(`جایگاه ${id} خالی شد`);
+  }, []);
+
+  const renameSlot = useCallback((id: SlotId, name: string) => {
+    setSlots((s) => (s[id] ? { ...s, [id]: { ...(s[id] as ScenarioSlots[SlotId]), name } } : s));
+  }, []);
+
   const exportJson = useCallback(() => {
     exportScenario({ config, tiers, behavior, schedule, activePreset, currency, regulatory });
     setToast('سناریو ذخیره شد');
@@ -209,6 +273,13 @@ export default function App() {
           kpis={result.kpis}
         />
 
+        <a
+          href="#config"
+          className="sr-only focus:not-sr-only focus:fixed focus:right-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-[13px] focus:font-bold focus:text-white"
+        >
+          پرش به محتوای اصلی
+        </a>
+
         <main className="relative mx-auto max-w-[1600px] space-y-12 px-4 py-8 lg:px-6">
           <section>
             <SectionHeading
@@ -255,6 +326,14 @@ export default function App() {
               config={config}
               result={result}
             />
+            <div id="cashflow" className="scroll-mt-32 pt-6">
+              <CashFlowTable
+                result={result}
+                config={config}
+                initialLiquidity={config.initialLiquidity}
+                onExportCsv={exportCsv}
+              />
+            </div>
           </section>
 
           <section>
@@ -276,7 +355,10 @@ export default function App() {
               subtitle="2D SENSITIVITY / STRESS TESTING"
               icon={<FlaskConical />}
             />
-            <SensitivityPanel input={deferredInput} />
+            <div className="space-y-6">
+              <SensitivityPanel input={deferredInput} />
+              <TornadoPanel input={deferredInput} />
+            </div>
           </section>
 
           <section>
@@ -302,9 +384,28 @@ export default function App() {
               icon={<ShieldCheck />}
             />
             <div className="space-y-6">
-              <RegulatoryPanel result={result} config={config} params={regulatory} onParams={patchRegulatory} />
-              <MaturityLadder result={result} config={config} params={regulatory} />
+              <RegulatoryPanel config={config} params={regulatory} onParams={patchRegulatory} reg={reg} />
+              <MaturityLadder result={result} config={config} reg={reg} attr={attr} />
             </div>
+          </section>
+
+          <section>
+            <SectionHeading
+              id="scenarios"
+              index="بخش ۴-ث"
+              title="مقایسهٔ سناریوها (A / B / C)"
+              subtitle="SCENARIO SLOTS · SIDE-BY-SIDE KPI AND LIQUIDITY COMPARISON"
+              icon={<GitCompareArrows />}
+            />
+            <ScenarioCompare
+              kpis={result.kpis}
+              currentRows={result.rows}
+              slots={slots}
+              onSnapshot={snapshotToSlot}
+              onLoad={loadSlot}
+              onClear={clearSlot}
+              onRename={renameSlot}
+            />
           </section>
 
           <section>
@@ -315,7 +416,10 @@ export default function App() {
               subtitle="CUSTOMER LOAN ESTIMATE · ELIGIBILITY & MONTHLY INSTALLMENT"
               icon={<Calculator />}
             />
-            <CustomerCalculator tiers={tiers} config={config} />
+            <div className="space-y-6">
+              <CustomerCalculator tiers={tiers} config={config} />
+              <TierComparison tiers={tiers} config={config} />
+            </div>
           </section>
 
           <section>
@@ -339,7 +443,11 @@ export default function App() {
         </footer>
 
         {toast && (
-          <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-[12.5px] font-semibold text-white shadow-2xl ring-1 ring-white/10 dark:bg-slate-800">
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-[12.5px] font-semibold text-white shadow-2xl ring-1 ring-white/10 dark:bg-slate-800"
+          >
             {toast}
           </div>
         )}

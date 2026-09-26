@@ -216,7 +216,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                     <NumField
                       size="sm"
                       value={t.alpha}
-                      min={5}
+                      min={0}
                       max={TIER_ALPHA_MAX}
                       step={5}
                       decimals={1}

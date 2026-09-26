@@ -1,7 +1,7 @@
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, MonthRow, SimKpis, Tier } from '../types';
 import { DEFAULT_BEHAVIOR, DEFAULT_CONFIG, DEFAULT_SCHEDULE, PRESETS } from './presets';
 import { EVENT_META } from './eventMeta';
-import { TIER_ALPHA_MAX } from './limits';
+import { IMPORT_MONEY_MAX, IMPORT_RATE_MAX, TIER_ALPHA_MAX } from './limits';
 import { DEFAULT_REGULATORY, type RegulatoryParams } from './regulatory';
 import { EMPTY_SLOTS, SLOT_IDS, type ScenarioSlot, type ScenarioSlots } from './scenarios';
 
@@ -34,25 +34,25 @@ function sanitizeConfig(v: unknown): GlobalConfig | undefined {
   if (!isObj(v)) return undefined;
   return {
     contractType: v.contractType === 'murabaha' ? 'murabaha' : 'qard',
-    qardFeeRate: finiteNumber(v.qardFeeRate, DEFAULT_CONFIG.qardFeeRate, 0, 60),
-    murabahaRate: finiteNumber(v.murabahaRate, DEFAULT_CONFIG.murabahaRate, 0, 60),
+    qardFeeRate: finiteNumber(v.qardFeeRate, DEFAULT_CONFIG.qardFeeRate, 0, IMPORT_RATE_MAX),
+    murabahaRate: finiteNumber(v.murabahaRate, DEFAULT_CONFIG.murabahaRate, 0, IMPORT_RATE_MAX),
     reserveRatio: finiteNumber(v.reserveRatio, DEFAULT_CONFIG.reserveRatio, 0, 100),
-    loanCap: finiteNumber(v.loanCap, DEFAULT_CONFIG.loanCap, 0, 1e16),
+    loanCap: finiteNumber(v.loanCap, DEFAULT_CONFIG.loanCap, 0, IMPORT_MONEY_MAX),
     horizon: finiteNumber(v.horizon, DEFAULT_CONFIG.horizon, 12, 120, true),
-    initialLiquidity: finiteNumber(v.initialLiquidity, DEFAULT_CONFIG.initialLiquidity, -1e16, 1e16),
+    initialLiquidity: finiteNumber(v.initialLiquidity, DEFAULT_CONFIG.initialLiquidity, -IMPORT_MONEY_MAX, IMPORT_MONEY_MAX),
     releaseReserve: typeof v.releaseReserve === 'boolean' ? v.releaseReserve : DEFAULT_CONFIG.releaseReserve,
     defaultRate: finiteNumber(v.defaultRate, DEFAULT_CONFIG.defaultRate, 0, 100),
-    interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, 100),
-    opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, 100),
-    depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, 100),
+    interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, IMPORT_RATE_MAX),
+    opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, IMPORT_RATE_MAX),
+    depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, IMPORT_RATE_MAX),
   };
 }
 
 function sanitizeBehavior(v: unknown): Behavior | undefined {
   if (!isObj(v)) return undefined;
   return {
-    totalDeposit: finiteNumber(v.totalDeposit, DEFAULT_BEHAVIOR.totalDeposit, 0, 1e16),
-    avgTicket: finiteNumber(v.avgTicket, DEFAULT_BEHAVIOR.avgTicket, 0, 1e16),
+    totalDeposit: finiteNumber(v.totalDeposit, DEFAULT_BEHAVIOR.totalDeposit, 0, IMPORT_MONEY_MAX),
+    avgTicket: finiteNumber(v.avgTicket, DEFAULT_BEHAVIOR.avgTicket, 0, IMPORT_MONEY_MAX),
     takeUpRate: finiteNumber(v.takeUpRate, DEFAULT_BEHAVIOR.takeUpRate, 0, 100),
     approvalRate: finiteNumber(v.approvalRate, DEFAULT_BEHAVIOR.approvalRate, 0, 100),
     runoffRate: finiteNumber(v.runoffRate, DEFAULT_BEHAVIOR.runoffRate, 0, 100),
@@ -75,7 +75,7 @@ function sanitizeTiers(v: unknown): Tier[] | undefined {
       tDep: finiteNumber(item.tDep, 1, 1, 12, true),
       tLoan: finiteNumber(item.tLoan, 12, 6, 60, true),
       alpha: finiteNumber(item.alpha, 100, 0, TIER_ALPHA_MAX),
-      minBalance: finiteNumber(item.minBalance, 0, 0, 1e16),
+      minBalance: finiteNumber(item.minBalance, 0, 0, IMPORT_MONEY_MAX),
       allocation: finiteNumber(item.allocation, 0, 0, 100),
       rateOverride:
         item.rateOverride === null || item.rateOverride === undefined

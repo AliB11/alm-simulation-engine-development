@@ -65,10 +65,6 @@ export function fmtCompact(n: number, digits = 2): string {
   return fmtNumber(n, 0);
 }
 
-export function fmtMonth(t: number | null | undefined): string {
-  return t === null || t === undefined ? '—' : `ماه ${toFa(t)}`;
-}
-
 /** تجزیه ورودی کاربر (ارقام فارسی/عربی/لاتین، جداکننده، ممیز فارسی) */
 export function parseNumber(s: string): number | null {
   const cleaned = toEn(s)

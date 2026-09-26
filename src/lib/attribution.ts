@@ -20,7 +20,8 @@
 
 import type { MonthRow } from '../types';
 import { EPS, finite } from './engine';
-import { EVENT_META } from './eventMeta';
+import { bucketCountFor, bucketSizeForRows } from './buckets';
+import { eventNcf } from './eventMeta';
 
 export interface TierAttribution {
   tierId: string;
@@ -67,14 +68,6 @@ function tippingOf(path: number[], months: number[]): number | null {
     if (path[i] < -EPS) return months[i];
   }
   return null;
-}
-
-export function bucketSizeFor(horizon: number): number {
-  const H = Math.round(finite(horizon, 60));
-  if (H <= 24) return 1;
-  if (H <= 60) return 3;
-  if (H <= 180) return 6;
-  return 12;
 }
 
 export function tierAttribution(rows: MonthRow[], colorOf: (index: number) => string): AttributionResult {
@@ -137,7 +130,7 @@ export function tierAttribution(rows: MonthRow[], colorOf: (index: number) => st
         default:
           break;
       }
-      ncfMatrix[i][t] += EVENT_META[e.type].sign * amount;
+      ncfMatrix[i][t] += eventNcf(e.type, amount);
     }
   }
 
@@ -227,8 +220,10 @@ export function tierAttribution(rows: MonthRow[], colorOf: (index: number) => st
   }
 
   /* ------------------------- ماتریس حرارتی نردبان ------------------------- */
-  const size = bucketSizeFor(H);
-  const bucketCount = Math.ceil(H / size);
+  // همان قاعدهٔ سطل‌بندی نردبان سررسید: اندازه از «افق» (آخرین ماه) گرفته
+  // می‌شود نه از تعداد ردیف‌ها، تا نقشهٔ حرارتی و نردبان روی یک شبکه باشند.
+  const size = bucketSizeForRows(rows);
+  const bucketCount = bucketCountFor(H, size);
   const bucketLabels: string[] = [];
   const cells: number[][] = Array.from({ length: n }, () => new Array<number>(bucketCount).fill(0));
   const inflow: number[] = new Array<number>(bucketCount).fill(0);

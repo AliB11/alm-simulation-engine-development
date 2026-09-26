@@ -59,9 +59,12 @@ export function slotInput(s: ScenarioSlot): SimInput {
   return { config: s.config, tiers: s.tiers, behavior: s.behavior, schedule: s.schedule };
 }
 
-/** شبیه‌سازی مجدد یک جایگاه — برای نمودار هم‌پوشانی نقدینگی */
-export function simulateSlot(s: ScenarioSlot): SimResult {
-  return simulate(slotInput(s), true);
+/**
+ * شبیه‌سازی مجدد یک جایگاه — سنجه‌ها همیشه با نسخهٔ جاری موتور
+ * بازمحاسبه می‌شوند تا مقایسهٔ سناریوها پس از تغییر مدل کهنه نماند.
+ */
+export function simulateSlot(s: ScenarioSlot, withDetails = false): SimResult {
+  return simulate(slotInput(s), withDetails);
 }
 
 /* --------------------------- سنجه‌های قابل مقایسه --------------------------- */

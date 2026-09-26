@@ -2,13 +2,13 @@ import { useMemo } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BookmarkPlus, GitCompareArrows, RotateCcw, Save, Trash2 } from 'lucide-react';
 import type { MonthRow, SimKpis } from '../types';
-import { simulate } from '../lib/engine';
 import {
   configDiffs,
+  kpiValue,
   KPI_ROWS,
+  simulateSlot,
   SLOT_IDS,
   SLOT_META,
-  slotInput,
   type ScenarioSlot,
   type ScenarioSlots,
   type SlotId,
@@ -34,11 +34,6 @@ interface SlotSim {
   slot: ScenarioSlot;
   kpis: SimKpis;
   rows: { t: number; cum: number }[];
-}
-
-function kpiOf(k: SimKpis, key: keyof SimKpis): number | null {
-  const v = k[key];
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 function formatDelta(kind: string, d: number): string {
@@ -118,7 +113,7 @@ export function ScenarioCompare({ kpis, currentRows, slots, onSnapshot, onLoad, 
     for (const id of SLOT_IDS) {
       const slot = slots[id];
       if (!slot) continue;
-      const res = simulate(slotInput(slot), false);
+      const res = simulateSlot(slot);
       out.push({ id, slot, kpis: res.kpis, rows: res.rows.map((r) => ({ t: r.t, cum: r.cum })) });
     }
     return out;
@@ -278,13 +273,13 @@ export function ScenarioCompare({ kpis, currentRows, slots, onSnapshot, onLoad, 
               </thead>
               <tbody>
                 {KPI_ROWS.map((row) => {
-                  const refValue = reference ? kpiOf(reference.kpis, row.key) : null;
+                  const refValue = reference ? kpiValue(reference.kpis, row.key) : null;
                   const scale = row.kind === 'money' ? factor : 1;
                   return (
                     <tr key={row.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800/70">
                       <td className="px-3 py-2 font-semibold text-slate-600 dark:text-slate-300">{row.label}</td>
                       {sims.map((s) => {
-                        const v = kpiOf(s.kpis, row.key);
+                        const v = kpiValue(s.kpis, row.key);
                         const delta = v !== null && refValue !== null && s.id !== reference?.id ? v - refValue : null;
                         const good =
                           delta === null || Math.abs(delta) < 1e-9 ? null : row.lowerIsBetter ? delta < 0 : delta > 0;
@@ -306,7 +301,7 @@ export function ScenarioCompare({ kpis, currentRows, slots, onSnapshot, onLoad, 
                       })}
                       <td className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-400">
                         {(() => {
-                          const v = kpiOf(kpis, row.key);
+                          const v = kpiValue(kpis, row.key);
                           return formatKpi(row.kind, v === null ? null : v * scale);
                         })()}
                       </td>

@@ -12,9 +12,8 @@ import {
 } from 'recharts';
 import { Layers3, TableProperties } from 'lucide-react';
 import type { GlobalConfig, SimResult } from '../types';
-import { computeRegulatory, type RegulatoryParams } from '../lib/regulatory';
-import { tierAttribution } from '../lib/attribution';
-import { tierColor } from '../lib/presets';
+import type { Regulatory } from '../lib/regulatory';
+import type { AttributionResult } from '../lib/attribution';
 import { axisUnit, fmtCompact, fmtNumber, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
 import { Badge, Card, CardHeader, Segmented } from './ui';
@@ -23,7 +22,9 @@ import { cn } from '../utils/cn';
 interface Props {
   result: SimResult;
   config: GlobalConfig;
-  params: RegulatoryParams;
+  /** سنجه‌ها و انتساب پله‌ها در ریشهٔ برنامه یک‌بار محاسبه و به هر دو کارت پاس داده می‌شوند */
+  reg: Regulatory;
+  attr: AttributionResult;
 }
 
 type View = 'ladder' | 'paths';
@@ -120,13 +121,10 @@ function LadderTooltip({ active, payload }: { active?: boolean; payload?: Readon
  * می‌شوند، به تفکیک بازهٔ زمانی و پله. به‌همراه انتساب تحلیلی حفرهٔ
  * نقدینگی به هر پله (بدون شبیه‌سازی مجدد).
  */
-export function MaturityLadder({ result, config, params }: Props) {
+export function MaturityLadder({ result, config, reg, attr }: Props) {
   const { dark, factor, unit } = useDisplay();
   const [view, setView] = useState<View>('ladder');
   const horizon = Math.round(config.horizon);
-
-  const reg = useMemo(() => computeRegulatory(result.rows, params), [result.rows, params]);
-  const attr = useMemo(() => tierAttribution(result.rows, tierColor), [result.rows]);
 
   const ladderData = useMemo<LadderDatum[]>(
     () =>
