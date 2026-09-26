@@ -7,14 +7,14 @@ import { presetInput } from './testUtils';
 /**
  * آزمون «اعداد طلایی» (Golden Numbers)
  *
- * سنجه‌های کلیدی سه پیش‌تنظیم واقعی با ورودی‌های پیش‌فرض، در سطح ریال
+ * سنجه‌های کلیدی سه الگوی نمونه با ورودی‌های پیش‌فرض، در سطح ریال
  * گرد (round) شده، فریز می‌شوند. هر تغییر در موتور که این اعداد را
  * جابه‌جا کند، یا یک باگ رگرسیونی است یا یک تغییر عمدی مدل که باید
  * آگاهانه و با به‌روزرسانی همین فایل انجام شود.
  */
 
 const GOLDEN: Record<string, Record<string, number | null>> = {
-  mehrabani: {
+  'sample-1': {
     totalDeposit: 50000000000,
     netDeposit: 45000000000,
     totalCommitment: 48420000000,
@@ -33,7 +33,7 @@ const GOLDEN: Record<string, Record<string, number | null>> = {
     netInterestIncome: 3261600000,
     netMargin: -1853559750,
   },
-  nikvam: {
+  'sample-2': {
     totalDeposit: 50000000000,
     netDeposit: 45000000000,
     totalCommitment: 40212000000,
@@ -52,7 +52,7 @@ const GOLDEN: Record<string, Record<string, number | null>> = {
     netInterestIncome: 2429280000,
     netMargin: -775986200,
   },
-  negin: {
+  'sample-3': {
     totalDeposit: 50000000000,
     netDeposit: 45000000000,
     totalCommitment: 33300000000,
@@ -117,7 +117,7 @@ describe('golden numbers for shipped presets', () => {
   });
 
   it('does not mutate the input tiers while simulating', () => {
-    const input = presetInput('nikvam');
+    const input = presetInput('sample-2');
     const before = JSON.stringify(input.tiers);
     simulate(input, true);
     assert.equal(JSON.stringify(input.tiers), before);

@@ -51,7 +51,7 @@ describe('scenario import validation', () => {
 
 describe('general ledger CSV export', () => {
   it('emits one signed row per event plus a reconciling total', () => {
-    const input = presetInput('negin');
+    const input = presetInput('sample-3');
     const result = simulate(input, true);
     const csv = buildLedgerCsv(result.rows, 1, 'تومان');
     const lines = csv.replace(/^\uFEFF/, '').split('\n');
@@ -85,7 +85,7 @@ describe('general ledger CSV export', () => {
   });
 
   it('scales amounts with the display factor and escapes embedded quotes', () => {
-    const input = presetInput('nikvam');
+    const input = presetInput('sample-2');
     const result = simulate(input, true);
     const toman = buildLedgerCsv(result.rows, 1, 'تومان');
     const rial = buildLedgerCsv(result.rows, 10, 'ریال');
@@ -116,7 +116,7 @@ describe('general ledger CSV export', () => {
 
 describe('scenario slot persistence', () => {
   const validSlot = () => {
-    const input = presetInput('nikvam');
+    const input = presetInput('sample-2');
     return {
       name: 'سناریوی آزمایشی',
       savedAt: 1_700_000_000_000,
@@ -136,7 +136,7 @@ describe('scenario slot persistence', () => {
     assert.ok(!('D' in slots), 'unknown slot ids are dropped');
     assert.deepEqual(Object.keys(slots), ['A', 'B', 'C']);
     assert.equal(slots.A?.name, 'سناریوی آزمایشی');
-    assert.equal(slots.A?.kpis.maxHole, simulate(presetInput('nikvam'), false).kpis.maxHole);
+    assert.equal(slots.A?.kpis.maxHole, simulate(presetInput('sample-2'), false).kpis.maxHole);
   });
 
   it('clamps hostile numbers inside a saved slot', () => {

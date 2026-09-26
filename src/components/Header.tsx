@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import {
   Activity,
+  Calculator,
   ChartArea,
   Download,
   FileBraces,
@@ -13,7 +14,6 @@ import {
   ShieldCheck,
   SquareFunction,
   Sun,
-  Table2,
   TriangleAlert,
   Upload,
   Wallet,
@@ -31,7 +31,7 @@ const NAV = [
   { id: 'stress', label: 'آزمون حساسیت', icon: FlaskConical },
   { id: 'advanced', label: 'مونت‌کارلو و بهینه‌یاب', icon: Activity },
   { id: 'regulatory', label: 'سنجه‌های مقرراتی', icon: ShieldCheck },
-  { id: 'tables', label: 'مقایسه و جداول', icon: Table2 },
+  { id: 'customer-calculator', label: 'محاسبه‌گر مشتری', icon: Calculator },
   { id: 'method', label: 'روش‌شناسی', icon: SquareFunction },
 ];
 

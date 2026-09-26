@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Behavior, DepositSchedule, GlobalConfig, SimInput, Tier } from '../types';
-import { amortization, applySensitivity, buildVintages, calcPmt, runSensitivity, simulate, uniformVintageCount } from './engine';
+import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, simulate, uniformVintageCount } from './engine';
 import { sanitizeState } from './io';
+import { presetInput } from './testUtils';
 
 const config: GlobalConfig = {
   contractType: 'qard',
@@ -46,6 +47,54 @@ const near = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) <= tol * Math
 
 const expectClose = (actual: number, expected: number) =>
   assert.ok(Math.abs(actual - expected) <= 1e-8, `expected ${actual} to be close to ${expected}`);
+
+describe('customer loan estimate', () => {
+  const fourMonthTier: Tier = {
+    ...tier,
+    name: 'حالت سوم',
+    tDep: 4,
+    tLoan: 12,
+    alpha: 110,
+    minBalance: 1_000_000,
+  };
+
+  it('estimates the shipped 4-month / 12-installment example with the configured Qard formula', () => {
+    const sample = presetInput('sample-2');
+    const exampleTier = sample.tiers.find((candidate) => candidate.tDep === 4 && candidate.tLoan === 12);
+    assert.ok(exampleTier, 'the default sample must include a 4-month / 12-installment option');
+    const offer = estimateTierOffer(exampleTier, sample.config, 100_000_000);
+    assert.equal(offer.eligible, true);
+    assert.equal(offer.loan, 110_000_000);
+    assert.equal(offer.capped, false);
+    expectClose(offer.monthlyPayment, calcPmt('qard', 110_000_000, 12, 4));
+    assert.ok(Math.abs(offer.totalRepayment - 114_400_000) < 1e-6);
+    assert.ok(Math.abs(offer.totalCharge - 4_400_000) < 1e-6);
+  });
+
+  it('applies the individual loan cap after calculating the raw eligible amount', () => {
+    const capped = estimateTierOffer(fourMonthTier, { ...config, loanCap: 100_000_000 }, 100_000_000);
+    assert.equal(capped.rawLoan, 110_000_000);
+    assert.equal(capped.loan, 100_000_000);
+    assert.equal(capped.capped, true);
+    expectClose(capped.monthlyPayment, calcPmt('qard', 100_000_000, 12, 4));
+  });
+
+  it('does not estimate a loan when the customer is below the tier minimum balance', () => {
+    const offer = estimateTierOffer(fourMonthTier, config, 500_000);
+    assert.equal(offer.eligible, false);
+    assert.equal(offer.loan, 0);
+    assert.equal(offer.monthlyPayment, 0);
+  });
+
+  it('uses the annuity formula for a Murabaha offer', () => {
+    const murabaha = estimateTierOffer(
+      fourMonthTier,
+      { ...config, contractType: 'murabaha', murabahaRate: 21 },
+      100_000_000,
+    );
+    expectClose(murabaha.monthlyPayment, calcPmt('murabaha', 110_000_000, 12, 21));
+  });
+});
 
 describe('ALM simulation issue regressions', () => {
   it('does not issue loans to customers below a tier minimum balance', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Activity, ChartArea, FlaskConical, Layers, Settings2, ShieldCheck, SquareFunction, Table2, Wallet } from 'lucide-react';
+import { Activity, Calculator, ChartArea, FlaskConical, Layers, Settings2, ShieldCheck, SquareFunction, Wallet } from 'lucide-react';
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, SimInput, Tier } from './types';
 import { DisplayContext, type DisplayState } from './context/display';
 import { simulate } from './lib/engine';
@@ -9,21 +9,19 @@ import {
   DEFAULT_PRESET,
   DEFAULT_SCHEDULE,
   PRESETS,
+  labelTiers,
   presetTiers,
 } from './lib/presets';
 import {
   clearState,
   exportCashFlowCsv,
   exportScenario,
-  loadSlots,
   loadState,
   sanitizeState,
-  saveSlots,
   saveState,
   THEME_KEY,
 } from './lib/io';
 import { DEFAULT_REGULATORY, type RegulatoryParams } from './lib/regulatory';
-import { EMPTY_SLOTS, snapshotSlot, type ScenarioSlots, type SlotId } from './lib/scenarios';
 import { Header } from './components/Header';
 import { SectionHeading } from './components/ui';
 import { GlobalConfigPanel } from './components/GlobalConfigPanel';
@@ -35,9 +33,7 @@ import { MonteCarloPanel } from './components/MonteCarloPanel';
 import { OptimizerPanel } from './components/OptimizerPanel';
 import { RegulatoryPanel } from './components/RegulatoryPanel';
 import { MaturityLadder } from './components/MaturityLadder';
-import { ScenarioCompare } from './components/ScenarioCompare';
-import { TierComparison } from './components/TierComparison';
-import { CashFlowTable } from './components/CashFlowTable';
+import { CustomerCalculator } from './components/CustomerCalculator';
 import { Methodology } from './components/Methodology';
 
 function initialDark(): boolean {
@@ -55,19 +51,18 @@ export default function App() {
 
   const [config, setConfig] = useState<GlobalConfig>(() => ({ ...DEFAULT_CONFIG, ...(saved?.config ?? {}) }));
   const [tiers, setTiersState] = useState<Tier[]>(() =>
-    saved?.tiers && saved.tiers.length > 0 ? saved.tiers : presetTiers(DEFAULT_PRESET),
+    labelTiers(saved?.tiers && saved.tiers.length > 0 ? saved.tiers : presetTiers(DEFAULT_PRESET)),
   );
   const [behavior, setBehavior] = useState<Behavior>(() => ({ ...DEFAULT_BEHAVIOR, ...(saved?.behavior ?? {}) }));
   const [schedule, setSchedule] = useState<DepositSchedule>(() => ({ ...DEFAULT_SCHEDULE, ...(saved?.schedule ?? {}) }));
   const [activePreset, setActivePreset] = useState<string | null>(() =>
-    saved && 'activePreset' in saved ? (saved.activePreset ?? null) : DEFAULT_PRESET,
+    saved?.activePreset ?? (saved?.tiers?.length ? null : DEFAULT_PRESET),
   );
   const [currency, setCurrency] = useState<Currency>(() => saved?.currency ?? 'toman');
   const [regulatory, setRegulatory] = useState<RegulatoryParams>(() => ({
     ...DEFAULT_REGULATORY,
     ...(saved?.regulatory ?? {}),
   }));
-  const [slots, setSlots] = useState<ScenarioSlots>(() => loadSlots() ?? EMPTY_SLOTS);
   const [dark, setDark] = useState<boolean>(initialDark);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -84,10 +79,6 @@ export default function App() {
   useEffect(() => {
     saveState({ config, tiers, behavior, schedule, activePreset, currency, regulatory });
   }, [config, tiers, behavior, schedule, activePreset, currency, regulatory]);
-
-  useEffect(() => {
-    saveSlots(slots);
-  }, [slots]);
 
   useEffect(() => {
     if (!toast) return;
@@ -114,7 +105,7 @@ export default function App() {
   const patchConfig = useCallback((p: Partial<GlobalConfig>) => setConfig((c) => ({ ...c, ...p })), []);
   const patchBehavior = useCallback((p: Partial<Behavior>) => setBehavior((b) => ({ ...b, ...p })), []);
   const setTiers = useCallback((t: Tier[]) => {
-    setTiersState(t);
+    setTiersState(labelTiers(t));
     setActivePreset(null);
   }, []);
 
@@ -130,7 +121,7 @@ export default function App() {
       depositProfitRate: p.depositProfitRate,
     }));
     setActivePreset(key);
-    setToast(`پیش‌تنظیم «${p.name}» بارگذاری شد`);
+    setToast(`«${p.name}» بارگذاری شد`);
   }, []);
 
   const reset = useCallback(() => {
@@ -152,11 +143,13 @@ export default function App() {
   const patchRegulatory = useCallback((p: Partial<RegulatoryParams>) => setRegulatory((r) => ({ ...r, ...p })), []);
 
   /* ---- تحلیل پیشرفته: اعمال خروجی بهینه‌یاب و اجرای مونت‌کارلو ---- */
-  const applyTiersDesign = useCallback((next: Tier[], label: string) => {
-    setTiersState(next);
-    setActivePreset(null);
-    setToast(`${label} روی پله‌ها اعمال شد`);
-  }, []);
+  const applyTiersDesign = useCallback(
+    (next: Tier[], label: string) => {
+      setTiers(next);
+      setToast(`${label} روی پله‌ها اعمال شد`);
+    },
+    [setTiers],
+  );
 
   const loadPerturbedRun = useCallback(
     (patch: { behavior: Behavior; config: GlobalConfig; schedule: DepositSchedule }, label: string) => {
@@ -168,38 +161,6 @@ export default function App() {
     },
     [],
   );
-
-  /* ---- مقایسهٔ سناریو A/B/C ---- */
-  const snapshotScenario = useCallback(
-    (id: SlotId) => {
-      setSlots((s) => ({ ...s, [id]: snapshotSlot(id, input, result.kpis) }));
-      setToast(`سناریوی جاری در جایگاه ${id} ذخیره شد`);
-    },
-    [input, result.kpis],
-  );
-
-  const loadScenario = useCallback(
-    (id: SlotId) => {
-      const slot = slots[id];
-      if (!slot) return;
-      setConfig(slot.config);
-      setTiersState(slot.tiers);
-      setBehavior(slot.behavior);
-      setSchedule(slot.schedule);
-      setActivePreset(null);
-      setToast(`سناریوی جایگاه ${id} بارگذاری شد`);
-    },
-    [slots],
-  );
-
-  const clearScenario = useCallback((id: SlotId) => {
-    setSlots((s) => ({ ...s, [id]: null }));
-    setToast(`جایگاه ${id} پاک شد`);
-  }, []);
-
-  const renameScenario = useCallback((id: SlotId, name: string) => {
-    setSlots((s) => (s[id] ? { ...s, [id]: { ...s[id]!, name: name.slice(0, 60) } } : s));
-  }, []);
 
   const exportJson = useCallback(() => {
     exportScenario({ config, tiers, behavior, schedule, activePreset, currency, regulatory });
@@ -213,7 +174,7 @@ export default function App() {
         const data = sanitizeState(JSON.parse(String(reader.result)));
         if (!data) throw new Error('invalid');
         if (data.config) setConfig({ ...DEFAULT_CONFIG, ...data.config });
-        if (data.tiers) setTiersState(data.tiers);
+        if (data.tiers) setTiersState(labelTiers(data.tiers));
         if (data.behavior) setBehavior({ ...DEFAULT_BEHAVIOR, ...data.behavior });
         if (data.schedule) setSchedule({ ...DEFAULT_SCHEDULE, ...data.schedule });
         if (data.currency) setCurrency(data.currency);
@@ -348,30 +309,13 @@ export default function App() {
 
           <section>
             <SectionHeading
-              id="tables"
+              id="customer-calculator"
               index="بخش ۵"
-              title="مقایسه سناریوها، پله‌ها و ریز جریان نقدینگی"
-              subtitle="SCENARIO A/B/C · TIER COMPARISON · MONTHLY CASH-FLOW MATRIX"
-              icon={<Table2 />}
+              title="محاسبه‌گر تسهیلات مشتری"
+              subtitle="CUSTOMER LOAN ESTIMATE · ELIGIBILITY & MONTHLY INSTALLMENT"
+              icon={<Calculator />}
             />
-            <div className="space-y-6">
-              <ScenarioCompare
-                kpis={result.kpis}
-                currentRows={result.rows}
-                slots={slots}
-                onSnapshot={snapshotScenario}
-                onLoad={loadScenario}
-                onClear={clearScenario}
-                onRename={renameScenario}
-              />
-              <TierComparison tiers={tiers} config={config} />
-              <CashFlowTable
-                result={result}
-                config={config}
-                initialLiquidity={config.initialLiquidity}
-                onExportCsv={exportCsv}
-              />
-            </div>
+            <CustomerCalculator tiers={tiers} config={config} />
           </section>
 
           <section>
@@ -390,7 +334,7 @@ export default function App() {
           <div className="mx-auto max-w-[1600px] px-4">
             موتور شبیه‌سازی مدیریت دارایی و بدهی (ALM) · محاسبات کاملاً پویا بر پایه ماتریس جریان وجوه نقد ویژه‌محور (Cohort/Vintage)
             <br />
-            ارقام پیش‌تنظیم‌ها برگرفته از اطلاعات عمومی منتشرشده بوده و برخی ضرایب تقریبی‌اند؛ نتایج صرفاً جنبه تحلیلی و شبیه‌سازی دارد.
+            ارقام نمونه صرفاً برای شروع طراحی هستند و قابل ویرایش‌اند؛ نتایج برآوردی‌اند و جایگزین پیشنهاد قطعی تسهیلات یا اعتبارسنجی نیستند.
           </div>
         </footer>
 

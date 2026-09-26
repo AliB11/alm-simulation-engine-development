@@ -6,7 +6,7 @@
 
 یک وب‌اپلیکیشن تک‌صفحه‌ای (SPA) واکنش‌گرا، راست‌چین و کاملاً فارسی برای طراحی محصولات تسهیلاتی امتیازی
 (سپرده‌محور) و شبیه‌سازی بلادرنگ ریسک نقدینگی بر پایه **ماتریس جریان وجوه نقد ویژه‌محور (Cohort / Vintage Cash-Flow)**.
-تمام محاسبات به‌صورت پویا در مرورگر انجام می‌شود و **هیچ ضریب یا عددی در کد هاردکد نشده است**.
+تمام محاسبات به‌صورت پویا در مرورگر انجام می‌شود؛ سه الگوی عمومی صرفاً برای شروع طراحی ارائه شده‌اند و ضرایب و حدودشان قابل ویرایش است.
 
 </div>
 
@@ -14,10 +14,10 @@
 
 ## ✨ Features / امکانات
 
-- **Dynamic math engine** — every rate and coefficient is user-driven; nothing is hardcoded.
+- **Dynamic math engine** — rates and coefficients update live from the active configuration; sample profiles are editable starting points.
 - **Two Islamic contract types** — قرض‌الحسنه (Qard, fee-based) و مرابحه (Murabaha, profit-based).
 - **Unlimited custom tiers** — add / edit inline / duplicate / reorder / delete product tiers.
-- **3 real-market presets** — طرح مهربانی (بانک ملی)، طرح نیک‌وام (بانک ملت)، طرح نگین فراپویا (بانک سپه).
+- **3 editable sample profiles** — الگوهای عمومی، بدون نام یا وابستگی به محصول بانکی مشخص.
 - **Cohort / Vintage cash-flow matrix** — configurable horizon (12–120 months) with lump / uniform / custom deposit scheduling.
 - **Double Liquidity Drain** — simultaneous loan commitment + deposit runoff at maturity (per CBI no-blocking rule).
 - **Live risk KPIs** — tipping point, maximum liquidity hole, leverage ratio, interbank funding cost, recovery month.
@@ -27,9 +27,8 @@
 - **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two of 8 risk variables
   (take-up, approval, runoff, churn, reserve ratio, α scale, price, deposit profit) × 5 metrics
   (max hole, tipping point, end balance, leverage, net margin).
-- **Tier comparison table** — loan, installment (PMT), total fee, ROI, effective annual rate (IRR), true customer cost.
-- **Monthly cash-flow table** — filters, unit scaling, per-month drill-down by tier & vintage, matrix CSV and a full
-  event-level **general ledger** CSV (one signed row per tier/vintage event, reconciling to cumulative liquidity).
+- **Customer loan calculator** — enter an average deposit balance, waiting period and repayment term to estimate eligibility, loan amount, monthly payment and total repayment using the active product rules.
+- **Cash-flow CSV export** — download the modeled monthly matrix from the toolbar when a detailed review is needed.
 - **Inverse tier designer** — coordinate search over α scale, waiting period, repayment and allocation tilt, subject to
   liquidity, leverage and margin constraints, with one-click apply.
 - **Monte Carlo / VaR** — seeded, reproducible draws of behavioral inputs; P(tipping), P(loss), P5–P99 and load-worst-run.
@@ -37,11 +36,10 @@
   These are educational stand-ins, not official supervisor calculations.
 - **Maturity ladder + tier attribution** — when principal returns versus when deposits leave, and which tier builds the hole
   (analytic removal, no extra simulation).
-- **Scenario slots A/B/C** — snapshot a full design, compare KPIs and overlay cumulative-liquidity paths.
 - **Methodology panel** — every formula shown with live-substituted values.
 - **Toman / Rial toggle, dark / light theme, localStorage persistence, JSON scenario import/export.**
 - **Offline Persian font** — Vazirmatn is bundled (OFL-1.1); the single-file build does not call Google Fonts.
-- **Golden-number tests + CI** — the three shipped presets are frozen to the rial, and GitHub Actions runs typecheck, tests and build.
+- **Golden-number tests + CI** — the three sample profiles are frozen to the rial, and GitHub Actions runs typecheck, tests and build.
 
 ---
 
@@ -170,11 +168,11 @@ src/
 │   ├── attribution.ts         # Analytic tier attribution of the liquidity hole
 │   ├── scenarios.ts           # Scenario slot model + KPI comparison rows
 │   ├── format.ts              # Persian-digit number/percent/money formatting & parsing
-│   ├── presets.ts             # Default config + 3 real-market presets
+│   ├── presets.ts             # Default config + 3 editable sample profiles
 │   ├── limits.ts              # Shared input bounds (not model coefficients)
 │   ├── eventMeta.ts           # Single source of truth for cash-flow event signs
 │   ├── io.ts                  # localStorage, matrix/ledger CSV, JSON, scenario slots
-│   ├── golden.test.ts         # Frozen KPI numbers for the three shipped presets
+│   ├── golden.test.ts         # Frozen KPI numbers for the three sample profiles
 │   └── *.test.ts              # Engine, optimizer, Monte Carlo, regulatory, import regressions
 └── components/
     ├── ui.tsx                 # Reusable primitives (Card, NumField, Slider, Segmented, …)
@@ -190,9 +188,7 @@ src/
     ├── OptimizerPanel.tsx     # §4-c Inverse tier designer
     ├── RegulatoryPanel.tsx    # §4-d LCR / NSFR / maturity-gap proxies
     ├── MaturityLadder.tsx     # §4-d Maturity ladder + tier attribution
-    ├── ScenarioCompare.tsx    # §5 Scenario slots A/B/C
-    ├── TierComparison.tsx     # §5 Sample-deposit comparison table
-    ├── CashFlowTable.tsx      # §5 Monthly cash-flow matrix + ledger export
+    ├── CustomerCalculator.tsx # §5 Customer loan and installment estimate
     └── Methodology.tsx        # Appendix: live formula trace
 ```
 
@@ -205,20 +201,19 @@ src/
 - **سقف فردی**: چون فرمول پایه تعهد شامل سقف نیست، سقف با کاهش ضریب مؤثر `α_eff` اعمال می‌شود؛ با تنظیم سقف روی صفر،
   نتیجه دقیقاً با فرمول پایه یکسان می‌شود.
 - **نرمال‌سازی تخصیص**: اگر مجموع سهم پله‌ها ۱۰۰٪ نباشد، سهم‌ها در محاسبات به‌طور خودکار نرمال می‌شوند و هشدار نمایش داده می‌شود.
-- **گزینه‌های خنثی به‌صورت پیش‌فرض**: آزادسازی سپرده قانونی (خاموش)، نرخ نکول اقساط (۰)، نرخ سود پرداختی سپرده (۰)،
-  هزینه فرصت سپرده (فقط در جدول مقایسه).
+- **گزینه‌های خنثی به‌صورت پیش‌فرض**: آزادسازی سپرده قانونی (خاموش)، نرخ نکول اقساط (۰) و نرخ سود پرداختی سپرده (۰).
 - **سود پرداختی سپرده**: روی ماندهٔ پایان دورهٔ هر ماه محاسبه می‌شود (نه معدل ماهانه) تا برای ورود یکجا در ماه صفر، دقیقاً
-  به تعداد ماه‌های ماندگاری سود شناسایی شود. پیش‌تنظیم «نگین فراپویا» چون سپردهٔ سرمایه‌گذاری کوتاه‌مدت است، نرخ ۲۰٫۵٪ را
-  به‌صورت پیش‌فرض فعال می‌کند؛ دو طرح قرض‌الحسنه بدون سود (۰٪) هستند.
-- **حداقل مانده پله**: در برآورد تجمیعی، فقط وقتی میانگین سپرده هر مشتری به حداقل مانده پله برسد، تعهد وام برای آن پله محاسبه می‌شود؛ این تقریب، توزیع مانده مشتریان را مدل نمی‌کند.
+  به تعداد ماه‌های ماندگاری سود شناسایی شود. نمونهٔ سوم برای نمایش این اثر، نرخ ۲۰٫۵٪ را به‌صورت پیش‌فرض فعال می‌کند؛
+  دو نمونهٔ قرض‌الحسنه بدون سود (۰٪) هستند.
+- **حداقل مانده پله**: موتور تجمیعی فقط در صورت رسیدن میانگین سپردهٔ مشتری نمونه به حداقل مانده، تعهد وام را برای آن حالت لحاظ می‌کند. محاسبه‌گر مشتری نیز همان شرط را برای ماندهٔ واردشده اعمال می‌کند.
 - **پله بدون اعطا**: پله‌ای که وامی اعطا نمی‌کند (حداقل مانده برآورده نشده یا `α_eff = 0`) وام‌گیرنده‌ای هم ندارد؛ بنابراین خروج سپرده‌اش فقط با `ω_churn` برآورد می‌شود و تعداد وام‌گیرندهٔ آن صفر گزارش می‌گردد (در جدول تعهدات با نشان «بدون اعطا» مشخص است).
 - **بهداشت ورودی موتور**: همهٔ ورودی‌های عددی (پله، پیکربندی، رفتار، زمان‌بندی) پیش از محاسبه با `finite`/`bounded` پالایش می‌شوند؛ یک مقدار `NaN`/خالی نمی‌تواند کل ماتریس و شاخص‌ها را `NaN` کند و داشبورد به‌اشتباه «پایدار» نشان دهد.
 - **اهرم ∞**: اگر منابع ورودی خالص صفر باشد (مثلاً `RR = 100%`) و همچنان خروجی وجود داشته باشد، اهرم خروج `∞` نمایش داده می‌شود؛ عدد `0×` در این حالت به‌اشتباه ایمن به نظر می‌رسید.
 - **نکول**: بخش وصول‌نشده اقساط از جریان نقد حذف می‌شود و اصل وصول‌نشده تا زمان تعریف فرض بازیافت/سوخت‌شدن، در مانده تسهیلات باقی می‌ماند. ارقام «کل بازپرداخت/کارمزد» در روش‌شناسی **قراردادی**‌اند و وصولی واقعی در افق، جداگانه گزارش می‌شود.
 - **زمان‌بندی سفارشی**: ویژه‌های خارج از افق حذف و سهم باقی‌مانده بازمقیاس می‌شود؛ پیش‌نمایش ریالی جدول زمان‌بندی نیز از همان مخرج استفاده می‌کند تا با ماتریس واگرا نشود.
 - **افق کوتاه**: اگر بخشی از تعهدات/اقساط خارج از افق قرار گیرد، هشدار شفاف نمایش داده می‌شود.
-- **منبع پیش‌تنظیم‌ها**: ارقام از اطلاعات عمومی منتشرشده گرفته شده و برخی ضرایب تقریبی‌اند؛ نتایج صرفاً جنبه تحلیلی/آموزشی دارد.
-- **اعداد طلایی**: `src/lib/golden.test.ts` سنجه‌های سه پیش‌تنظیم را با ورودی‌های پیش‌فرض، در سطح ریال گردشده، فریز کرده است. هر تغییری که این اعداد را جابه‌جا کند باید آگاهانه و همراه با به‌روزرسانی همان فایل باشد.
+- **الگوهای نمونه**: اعداد صرفاً برای نمایش رفتار مدل انتخاب شده‌اند، به مؤسسهٔ مشخصی وابستگی ندارند و پیشنهاد تسهیلات محسوب نمی‌شوند.
+- **اعداد طلایی**: `src/lib/golden.test.ts` سنجه‌های سه الگوی نمونه را با ورودی‌های پیش‌فرض، در سطح ریال گرد‌شده، فریز کرده است. هر تغییری که این اعداد را جابه‌جا کند باید آگاهانه و همراه با به‌روزرسانی همان فایل باشد.
 - **سنجه‌های LCR/NSFR**: تقریب آموزشی برای مقایسهٔ طرح‌ها هستند و تعریف کمیتهٔ بال یا الزام ناظر داخلی را پیاده نمی‌کنند. همهٔ ضرایب‌شان از رابط کاربری می‌آید و با سناریو ذخیره می‌شود.
 - **بهینه‌یاب**: جست‌وجوی مختصاتی است، نه تضمین بهینهٔ سراسری. اگر هیچ طرحی همهٔ قیدها را برآورده نکند، کم‌نقض‌ترین طرح نشان داده می‌شود و دکمهٔ اعمال تا اجرای مجدد (پس از تغییر ورودی) غیرفعال می‌ماند.
 - **مونت‌کارلو**: مقیاس توزیع‌ها تعریف خود لغزندهٔ «شدت» است (در شدت ۱۰۰٪، σ نرخ‌ها ۲۰ واحد درصد و σ لگاریتمی حجم منابع ۲۵٪). شدت صفر اجرا را دقیقاً به شبیه‌سازی قطعی برمی‌گرداند.
@@ -226,8 +221,8 @@ src/
 
 </div>
 
-> **Disclaimer:** This tool is for analytical and educational simulation only. Preset figures are drawn from
-> publicly available information and some coefficients are approximate. It is **not** financial advice.
+> **Disclaimer:** This tool is for analytical and educational simulation only. Sample profiles are illustrative and
+> do not describe a specific institution or guarantee eligibility, approval, or disbursement. It is **not** financial advice.
 
 ---
 

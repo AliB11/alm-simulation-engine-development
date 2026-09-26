@@ -15,7 +15,7 @@ import {
 import { buildVintages } from './engine';
 import { near, presetInput } from './testUtils';
 
-const base = presetInput('nikvam');
+const base = presetInput('sample-2');
 const deterministic: McOptions = { ...DEFAULT_MC, intensity: 0 };
 
 describe('monte carlo — random number generation', () => {
