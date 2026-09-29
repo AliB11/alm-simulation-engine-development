@@ -301,6 +301,11 @@ export function MaturityLadder({ result, config, reg, attr }: Props) {
                 بدون {t.name}
               </span>
             ))}
+            {attr.tiers.length > 8 && (
+              <span className="text-[10.5px] text-slate-400">
+                +{toFa(attr.tiers.length - 8)} پلهٔ دیگر (فقط در جدول پایین)
+              </span>
+            )}
             <span className="ms-auto text-[10.5px] text-slate-400">محور: {pathUnit.label}</span>
           </div>
           <div dir="ltr" className="px-2 pb-3 sm:px-4">
@@ -405,7 +410,7 @@ export function MaturityLadder({ result, config, reg, attr }: Props) {
                   ) : (
                     <>
                       ماه {toFa(t.tippingWithout)}
-                      {attr.base.tipping !== null && Number.isFinite(t.tippingDelta ?? NaN) && (
+                      {attr.base.tipping !== null && Number.isFinite(t.tippingDelta ?? NaN) && (t.tippingDelta ?? 0) !== 0 && (
                         <span
                           className={cn(
                             'ms-1.5 text-[10.5px] font-bold',
@@ -437,7 +442,7 @@ export function MaturityLadder({ result, config, reg, attr }: Props) {
         {attr.unattributedProfit > 0 && (
           <>
             {' '}
-            سود منتسب‌نشده (سپردهٔ بدون تخصیص پله): {fmtCompact(attr.unattributedProfit * factor)}
+            سود منتسب‌نشده (سپردهٔ بدون تخصیص پله): {fmtCompact(attr.unattributedProfit * factor)} {unit}
           </>
         )}
       </div>

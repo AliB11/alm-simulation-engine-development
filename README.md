@@ -25,7 +25,7 @@
   non-cash loan-loss provisions and the resulting **net margin** (with a monthly income/expense/cumulative-margin chart).
   Neutral at `r_dep = 0` and `δ = 0`.
 - **Interactive charts** (Recharts) — cumulative liquidity (green/red split at zero), inflow vs. outflow, simulated balance sheet.
-- **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two of 8 risk variables
+- **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two of 9 risk variables
   (take-up, approval, runoff, churn, reserve ratio, α scale, price, deposit profit) × 5 metrics
   (max hole, tipping point, end balance, leverage, net margin).
 - **Tornado risk-driver ranking** — one-at-a-time shocks over the same stress grid, sorted by swing, so the heatmap's
@@ -130,6 +130,7 @@
 - حجم منابع: `D′ = D × exp(ε × intensity/100 × 0.25)`
 - شوک زمان‌بندی: `round(ε × intensity/100 × 1.5)` ماه، بدون از دست رفتن حجم سپرده
 - `P(واژگونی)`، `P(زیان)` و صدک‌های P5…P99 از همان موتور قطعی، روی ورودی‌های نمونه‌گیری‌شده
+- هزینهٔ ذخیره مطالبات هم صدک‌بندی می‌شود؛ اجراهای با اهرم نامتناهی (منابع خالص صفر) از صدک‌های اهرم کنار گذاشته و شمرده می‌شوند
 - مولد `mulberry32` با دانهٔ قابل تنظیم؛ نتیجه با دانهٔ یکسان دقیقاً بازتولید می‌شود
 
 ### ط) بهینه‌یاب طراحی

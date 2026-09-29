@@ -112,6 +112,26 @@ function EventsDetail({
           <EventList items={outflows} empty="خروجی نقدی در این ماه ثبت نشده است." fmt={fmt} rr={rr} />
         </div>
       </div>
+      {(row.provisionCost > EPS || row.writeOff > EPS || row.fundingCost > EPS) && (
+        <div className="rounded-lg bg-amber-50/70 px-3 py-2 text-[11px] leading-6 text-amber-800 ring-1 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/20">
+          اقلام غیرنقدی این ماه (در NCF لحاظ نمی‌شوند):
+          {row.provisionCost > EPS && (
+            <>
+              {' '}هزینهٔ ذخیره مطالبات <b>{fmt(row.provisionCost)}</b> (کاهندهٔ حاشیه)
+            </>
+          )}
+          {row.writeOff > EPS && (
+            <>
+              {' '}· سوخت از مانده تسهیلات <b>{fmt(row.writeOff)}</b>
+            </>
+          )}
+          {row.fundingCost > EPS && (
+            <>
+              {' '}· هزینهٔ تأمین کسری <b>{fmt(row.fundingCost)}</b> (کاهندهٔ حاشیه)
+            </>
+          )}
+        </div>
+      )}
       <div
         dir="ltr"
         className="overflow-x-auto rounded-lg bg-white px-3 py-2 text-left font-mono text-[11px] leading-6 text-slate-600 ring-1 ring-slate-100 dark:bg-slate-900/70 dark:text-slate-300 dark:ring-slate-800"

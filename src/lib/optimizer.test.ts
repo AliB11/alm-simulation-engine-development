@@ -226,3 +226,15 @@ describe('design optimizer — objective, constraints and search', () => {
     assert.ok(parts.some((p) => p.includes('انتظار بلند')));
   });
 });
+
+describe('optimizer — violation tolerances', () => {
+  it('tolerates floating-point dust in the non-negative-margin constraint', () => {
+    const kpis = simulate(input, false).kpis;
+    const dusty = { ...kpis, netMargin: -1e-9 };
+    assert.deepEqual(violations(dusty, { maxHolePct: 0, requireSolvent: false, maxLeverage: 0, requirePositiveMargin: true }), []);
+    const losing = { ...kpis, netMargin: -1 };
+    assert.ok(
+      violations(losing, { maxHolePct: 0, requireSolvent: false, maxLeverage: 0, requirePositiveMargin: true }).includes('حاشیهٔ خالص منفی'),
+    );
+  });
+});

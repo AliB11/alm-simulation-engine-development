@@ -3,6 +3,7 @@ import { ChevronDown, HandCoins, Percent, Settings2, SlidersHorizontal } from 'l
 import type { GlobalConfig } from '../types';
 import { useDisplay } from '../context/display';
 import { fmtCompact, fmtPct } from '../lib/format';
+import { IMPORT_MONEY_MAX } from '../lib/limits';
 import { Button, Card, CardHeader, Field, NumField, Segmented, Toggle } from './ui';
 import { cn } from '../utils/cn';
 
@@ -94,7 +95,7 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
           info="سقف وام قابل پرداخت به هر فرد. ضریب مؤثر هر پله = min(α ، سقف ÷ مانده مبنا). مقدار صفر یعنی بدون سقف."
           hint={config.loanCap > 0 ? `${fmtCompact(config.loanCap * factor)} ${unit}` : 'بدون سقف (۰)'}
         >
-          <NumField money value={config.loanCap} onChange={(v) => onChange({ loanCap: v })} min={0} suffix={unit} />
+          <NumField money value={config.loanCap} onChange={(v) => onChange({ loanCap: v })} min={0} max={IMPORT_MONEY_MAX} suffix={unit} />
         </Field>
 
         <Field

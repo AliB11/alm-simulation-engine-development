@@ -16,7 +16,7 @@
  * ------------------------------------------------------------------ */
 
 import type { SimInput, SimKpis, Tier } from '../types';
-import { bounded, finite, simulate } from './engine';
+import { EPS, bounded, finite, simulate } from './engine';
 import { TIER_ALPHA_MAX } from './limits';
 import { fmtNumber, fmtPct, fmtRatio, toFa } from './format';
 
@@ -43,7 +43,7 @@ export const LEVER_GRID = {
 };
 
 export const OBJECTIVE_LABELS: Record<Objective, { label: string; hint: string }> = {
-  margin: { label: 'حاشیهٔ خالص بانک', hint: 'بیشینه‌سازی درآمد منهای سود سپرده و هزینهٔ تأمین کسری' },
+  margin: { label: 'حاشیهٔ خالص بانک', hint: 'بیشینه‌سازی درآمد منهای سود سپرده، هزینهٔ تأمین کسری و هزینهٔ ذخیره مطالبات' },
   income: { label: 'درآمد کارمزد / سود', hint: 'بیشینه‌سازی درآمد وصولی اقساط در افق' },
   volume: { label: 'حجم تسهیلات', hint: 'بیشینه‌سازی کل تعهد اعطای وام' },
   safety: { label: 'کمینه‌سازی کسری نقدینگی', hint: 'کمترین حداکثر حفرهٔ نقدینگی (حالت محافظه‌کارانه)' },
@@ -161,7 +161,7 @@ export function violations(k: SimKpis, c: Constraints): string[] {
   if (c.maxLeverage > 0 && k.leverage > c.maxLeverage) {
     out.push(`اهرم ${fmtRatio(k.leverage)}× > سقف ${fmtNumber(c.maxLeverage, 2, true)}×`);
   }
-  if (c.requirePositiveMargin && k.netMargin < 0) out.push('حاشیهٔ خالص منفی');
+  if (c.requirePositiveMargin && k.netMargin < -EPS) out.push('حاشیهٔ خالص منفی');
   return out;
 }
 

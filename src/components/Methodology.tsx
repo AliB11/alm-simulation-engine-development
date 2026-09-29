@@ -174,7 +174,7 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             }
           >
             <Formula live={`RR = ${p(RR)}  →  Net deposits = ${m(k.totalDeposit)} × ${p(1 - RR)} = ${m(k.netDeposit)}`}>
-              Inflows_t = D_new,t × (1 − RR) + Σ_k PMT_k,t
+              Inflows_t = D_new,t × (1 − RR) + Σ_k PMT_k,t + Release_t
             </Formula>
             <Formula
               live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}  |  Σ Deposit profit = ${m(k.totalProfitPaid)}`}
@@ -198,7 +198,9 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             <Formula live={k.tippingPoint === null ? 'Tipping Point = none (CumLiq ≥ 0 ∀t)' : `Tipping Point = month ${toFa(k.tippingPoint)}`}>
               Tipping Point = min{'{'} t : CumLiq_t {'<'} 0 {'}'}
             </Formula>
-            <Formula live={`min(CumLiq) = ${m(k.minCum)} at month ${toFa(k.minCumMonth)}`}>Max Liquidity Hole = min_t (CumLiq_t)</Formula>
+            <Formula live={`maxHole = ${m(k.maxHole)} = −min(0, min CumLiq); min at month ${toFa(k.minCumMonth)}`}>
+              Max Liquidity Hole = −min(0, min_t CumLiq_t)
+            </Formula>
             <Formula live={`Interbank cost ≈ ${m(k.interbankCost)}  (r_ib = ${p(config.interbankRate)}%)`}>
               Funding Cost = Σ_t max(0, −CumLiq_t) × r_ib / 12
             </Formula>
@@ -291,9 +293,9 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             desc="نرخ‌های رفتاری حول برآورد شما با توزیع نرمال و حجم منابع با توزیع لگ‌نرمال نمونه‌گیری می‌شوند. دانهٔ تصادفی قابل تنظیم است تا هر توزیع دقیقاً بازتولید شود."
           >
             <Formula live={`current point estimate: hole = ${m(k.maxHole)}, margin = ${m(k.netMargin)}, tipping = ${k.tippingPoint === null ? 'none' : `month ${toFa(k.tippingPoint)}`}`}>
-              ρ′ = clamp(ρ + ε·σ, 0, 100) , ε ~ N(0,1) , σ = intensity × 20pp
+              ρ′ = clamp(ρ + ε·σ, 0, 100) , ε ~ N(0,1) , σ = (intensity/100) × 20pp
             </Formula>
-            <Formula>D′ = D × exp(ε · intensity × 0.25) ; timing shock ~ round(ε · intensity × 1.5)</Formula>
+            <Formula>D′ = D × exp(ε · (intensity/100) × 0.25) ; timing shock ~ round(ε · (intensity/100) × 1.5)</Formula>
             <Formula>P(tipping) = share of runs with min CumLiq &lt; 0 ; VaR₉₅ = P95(max hole)</Formula>
           </Step>
 

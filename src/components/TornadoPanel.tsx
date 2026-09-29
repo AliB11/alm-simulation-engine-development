@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer,
 import { Wind } from 'lucide-react';
 import type { SimInput } from '../types';
 import { type SensMetric } from '../lib/engine';
-import { higherIsBetter, isNegligible, runTornado, type TornadoBar } from '../lib/tornado';
+import { LEVERAGE_DISPLAY_CAP, higherIsBetter, isNegligible, runTornado, type TornadoBar } from '../lib/tornado';
 import { axisUnit, fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
 import { Badge, Card, CardHeader, Segmented } from './ui';
@@ -247,6 +247,11 @@ export function TornadoPanel({ input }: { input: SimInput }) {
         آن باید از ماتریس دوبعدی بالای همین بخش استفاده کرد. کران‌ها دقیقاً همان مقادیر شبکهٔ آزمون بحران‌اند، بنابراین
         نتیجهٔ این جدول با خانه‌های ماتریس سازگار است. «نقطهٔ واژگونی ندارد» به‌عنوان یک ماه پس از افق لحاظ می‌شود تا
         امن‌ترین حالت بزرگ‌ترین عدد باشد؛ محرک‌های کم‌اثر در جدول کم‌رنگ‌تر نمایش داده می‌شوند.
+        {metric === 'leverage' && (
+          <>
+            {' '}اهرم‌های بالای {toFa(LEVERAGE_DISPLAY_CAP)}× برای خوانایی نمودار در همین سقف نمایش داده می‌شوند.
+          </>
+        )}
       </div>
     </Card>
   );

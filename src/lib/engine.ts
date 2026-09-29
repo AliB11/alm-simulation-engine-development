@@ -14,7 +14,7 @@
  *     Outflows_t = Σ Commitment_k,t + Σ Withdrawal_k,t + Profit_t
  *     NCF_t = Inflows_t − Outflows_t ;  CumLiq_t = CumLiq_{t−1} + NCF_t
  *     Profit_t = میانگین ماندهٔ ماهانه × r_dep / 12 (ماه‌شمار، نه ماندهٔ پایان دوره)
- *  د) Tipping Point = اولین t با CumLiq_t < 0 ؛ Max Hole = min(CumLiq_t)
+ *  د) Tipping Point = اولین t با CumLiq_t < 0 ؛ Max Hole = −min(0, min_t CumLiq_t)
  *     Leverage = (Σ Commitment + Σ Withdrawal) / (D·(1−RR)) — اگر مخرج صفر و صورت مثبت باشد: ∞
  *  هـ) نکول: ذخیرهٔ زیان موردانتظار (L·δ·LGD) در ماه اعطا شناسایی و اصل
  *     وصول‌نشده پس از سررسید آخرین قسط + مهلت سوخت، از مانده تسهیلات
@@ -713,6 +713,7 @@ export function sampleComparison(tiers: Tier[], config: GlobalConfig, sample: nu
 /* ------------------------ تحلیل حساسیت دوبعدی ------------------------ */
 
 export type SensVar =
+  | 'defaultRate'
   | 'takeUpRate'
   | 'approvalRate'
   | 'runoffRate'
@@ -733,6 +734,13 @@ export interface SensVarDef {
 }
 
 export const SENS_VARS: SensVarDef[] = [
+  {
+    key: 'defaultRate',
+    label: 'نرخ نکول اقساط',
+    symbol: 'δ',
+    values: () => [0, 2, 5, 10, 15, 25, 40],
+    current: (i) => i.config.defaultRate,
+  },
   {
     key: 'takeUpRate',
     label: 'نرخ تقاضای وام',
@@ -799,6 +807,8 @@ export function applySensitivity(input: SimInput, key: SensVar, value: number): 
     case 'runoffRate':
     case 'churnRate':
       return { ...input, behavior: { ...input.behavior, [key]: bounded(value, 0, 100, 0) } };
+    case 'defaultRate':
+      return { ...input, config: { ...input.config, defaultRate: bounded(value, 0, 100, 0) } };
     case 'reserveRatio':
       return { ...input, config: { ...input.config, reserveRatio: bounded(value, 0, 100, 0) } };
     case 'profitRate':

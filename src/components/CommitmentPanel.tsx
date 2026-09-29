@@ -3,6 +3,7 @@ import type { Behavior, CustomVintage, DepositSchedule, GlobalConfig, SimResult,
 import { fmtCompact, fmtPct, toFa } from '../lib/format';
 import { uid } from '../lib/presets';
 import { commitmentFactor, uniformVintageCount, withdrawalFactor } from '../lib/engine';
+import { IMPORT_MONEY_MAX } from '../lib/limits';
 import { useDisplay } from '../context/display';
 import { Badge, Button, Card, CardHeader, Field, Money, NumField, Segmented, SliderField } from './ui';
 import { KpiBoard, TierCommitmentTable } from './KpiBoard';
@@ -251,7 +252,7 @@ export function CommitmentPanel({ behavior, onBehavior, schedule, onSchedule, co
             info="مانده مبنا = max(این مقدار ، حداقل مانده پله). برای اعمال سقف فردی تسهیلات (α_eff) و برآورد تعداد وام‌گیرندگان استفاده می‌شود."
             hint="فرض رفتاری برای اعمال سقف فردی و برآورد تعداد متقاضیان"
           >
-            <NumField money value={behavior.avgTicket} min={0} onChange={(v) => onBehavior({ avgTicket: v })} suffix={unit} />
+            <NumField money value={behavior.avgTicket} min={0} max={IMPORT_MONEY_MAX} onChange={(v) => onBehavior({ avgTicket: v })} suffix={unit} />
           </Field>
 
           <ScheduleEditor

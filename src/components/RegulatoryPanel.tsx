@@ -297,7 +297,7 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
               {reg.walAssets === null ? '—' : `${fmtNumber(reg.walAssets, 2, true)} ماه`}
             </div>
           </Field>
-          <Field label="WAL تعهدات (برداشت + ماندهٔ افق)">
+          <Field label="WAL تعهدات (برداشت + سود سپرده + ماندهٔ افق)">
             <div className="text-[15px] font-black tabular-nums">
               {reg.walLiabilities === null ? '—' : `${fmtNumber(reg.walLiabilities, 2, true)} ماه`}
             </div>
@@ -331,7 +331,7 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
           <br />
           ω_eff = (1 − s) × ω_retail + s × ω_wholesale
           <br />
-          NSFR(m) = [ DepositBalance(m) × w ] ÷ [ LoanBook(m) × r ] × 100 &nbsp;(m = 12)
+          NSFR(m) = [ DepositBalance(m) × w ] ÷ [ LoanBook(m) × r ] × 100 &nbsp;(m = 12؛ در افق کوتاه‌تر، آخرین ماه)
           <br />
           WAL = Σ t × Flow(t) ÷ Σ Flow(t) &nbsp;·&nbsp; Gap = WAL(assets) − WAL(liabilities)
         </div>
@@ -341,7 +341,7 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
           می‌شوند. در WAL تعهدات، ماندهٔ سپرده‌ای که تا پایان افق زنده می‌ماند به‌عنوان تعهدی با سررسید باز در ماه آخر لحاظ
           می‌شود. ضریب پیش‌فرض‌ها: خروج استرس خرد {fmtPct(DEFAULT_REGULATORY.stressRunoff, 1)}، پایداری منابع{' '}
           {fmtPct(DEFAULT_REGULATORY.stableWeight, 0)}، نیاز به تأمین {fmtPct(DEFAULT_REGULATORY.loanWeight, 0)}، سهم کلان{' '}
-          {fmtPct(DEFAULT_REGULATORY.wholesaleShare, 0)} و تنزیل {fmtPct(DEFAULT_REGULATORY.hqlaHaircut, 0)} — همه قابل تغییر
+          {fmtPct(DEFAULT_REGULATORY.wholesaleShare, 0)}، خروج استرس کلان {fmtPct(DEFAULT_REGULATORY.wholesaleRunoff, 0)} و تنزیل {fmtPct(DEFAULT_REGULATORY.hqlaHaircut, 0)} — همه قابل تغییر
           توسط شما و بدون هیچ عدد ثابت در موتور.
           <br />
           <b className="text-slate-600 dark:text-slate-300">

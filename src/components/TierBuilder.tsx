@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash } from 'lucide-react';
 import type { GlobalConfig, Tier, TierResult } from '../types';
 import { PRESETS, tierColor, tierLabel, uid } from '../lib/presets';
-import { TIER_ALPHA_MAX } from '../lib/limits';
+import { IMPORT_MONEY_MAX, TIER_ALPHA_MAX } from '../lib/limits';
 import { globalRate } from '../lib/engine';
 import { fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
@@ -71,7 +71,8 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
     }));
     const diff = Math.round((100 - next.reduce((s, t) => s + t.allocation, 0)) * 10) / 10;
     const lastIdx = next.map((t) => t.allocation > 0).lastIndexOf(true);
-    if (lastIdx >= 0 && diff !== 0) next[lastIdx].allocation = Math.round((next[lastIdx].allocation + diff) * 10) / 10;
+    if (lastIdx >= 0 && diff !== 0)
+      next[lastIdx].allocation = Math.max(0, Math.round((next[lastIdx].allocation + diff) * 10) / 10);
     onChange(next);
   };
 
@@ -232,6 +233,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                       money
                       value={t.minBalance}
                       min={0}
+                      max={IMPORT_MONEY_MAX}
                       onChange={(v) => update(t.id, { minBalance: v })}
                       className="w-[140px]"
                       ariaLabel="حداقل میانگین مانده"

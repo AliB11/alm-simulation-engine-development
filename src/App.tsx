@@ -418,7 +418,7 @@ export default function App() {
             />
             <div className="space-y-6">
               <CustomerCalculator tiers={tiers} config={config} />
-              <TierComparison tiers={tiers} config={config} />
+              <TierComparison tiers={tiers} config={config} onOpportunityRate={(v) => patchConfig({ opportunityRate: v })} />
             </div>
           </section>
 

@@ -202,3 +202,22 @@ describe('scenario slot persistence', () => {
     assert.equal(hostile?.config?.writeOffLag, 600);
   });
 });
+
+describe('policy-rate import ranges', () => {
+  it('preserves policy rates up to 100 while contract rates stay capped at 60', () => {
+    const state = sanitizeState({
+      config: {
+        qardFeeRate: 80,
+        murabahaRate: 90,
+        interbankRate: 80,
+        depositProfitRate: 100,
+        opportunityRate: 75,
+      },
+    });
+    assert.equal(state?.config?.qardFeeRate, 60);
+    assert.equal(state?.config?.murabahaRate, 60);
+    assert.equal(state?.config?.interbankRate, 80);
+    assert.equal(state?.config?.depositProfitRate, 100);
+    assert.equal(state?.config?.opportunityRate, 75);
+  });
+});

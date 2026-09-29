@@ -44,9 +44,9 @@ function sanitizeConfig(v: unknown): GlobalConfig | undefined {
     defaultRate: finiteNumber(v.defaultRate, DEFAULT_CONFIG.defaultRate, 0, 100),
     lgdRate: finiteNumber(v.lgdRate, DEFAULT_CONFIG.lgdRate, 0, 100),
     writeOffLag: finiteNumber(v.writeOffLag, DEFAULT_CONFIG.writeOffLag, 0, 600, true),
-    interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, IMPORT_RATE_MAX),
-    opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, IMPORT_RATE_MAX),
-    depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, IMPORT_RATE_MAX),
+    interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, 100),
+    opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, 100),
+    depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, 100),
   };
 }
 
@@ -303,7 +303,7 @@ export function buildLedgerCsv(rows: MonthRow[], factor: number, unit: string): 
         [
           row.t,
           csvText(meta.label),
-          csvText(e.tierIndex >= 0 ? e.tierName : 'سپرده‌گذاران (کل منابع)'),
+          csvText(e.tierName),
           vintage,
           e.vintages,
           inst,

@@ -135,7 +135,7 @@ describe('monte carlo — run, summarize and histogram', () => {
   it('summarizes percentiles in non-decreasing order', async () => {
     const summary = await runMonteCarlo(base, { ...DEFAULT_MC, runs: 40, seed: 11, intensity: 60 });
     assert.equal(summary.runs, 40);
-    for (const set of [summary.maxHole, summary.endCum, summary.netMargin, summary.leverage, summary.interbankCost]) {
+    for (const set of [summary.maxHole, summary.endCum, summary.netMargin, summary.leverage, summary.interbankCost, summary.provision]) {
       assert.ok(set.min <= set.p5 + 1e-9);
       assert.ok(set.p5 <= set.p25 + 1e-9);
       assert.ok(set.p25 <= set.p50 + 1e-9);
@@ -195,8 +195,9 @@ describe('monte carlo — run, summarize and histogram', () => {
     for (const set of [summary.maxHole, summary.netMargin]) {
       for (const v of Object.values(set)) assert.ok(Number.isFinite(v));
     }
-    // اهرم می‌تواند بی‌نهایت شود؛ خلاصه باید آن را با عدد متناهی جایگزین کند
+    // اهرم می‌تواند بی‌نهایت شود؛ خلاصه آن را از صدک‌ها کنار می‌گذارد و می‌شمرد
     assert.ok(Number.isFinite(summary.leverage.max));
+    assert.equal(summary.leverageInfRuns, summary.samples.filter((s) => !Number.isFinite(s.leverage)).length);
   });
 
   it('handles an empty sample set in summarizeMc and percentile', () => {
@@ -227,5 +228,23 @@ describe('monte carlo — run, summarize and histogram', () => {
 
     const withJunk = histogram([1, NaN, Infinity, 2, -Infinity], 4);
     assert.equal(withJunk.reduce((s, b) => s + b.count, 0), 2, 'non-finite samples are dropped');
+  });
+});
+
+describe('monte carlo — infinite leverage and provision', () => {
+  it('excludes infinite leverage from percentiles and counts those runs', async () => {
+    const stressed = { ...base, config: { ...base.config, reserveRatio: 100 } };
+    const summary = await runMonteCarlo(stressed, { ...DEFAULT_MC, runs: 30, seed: 5, intensity: 40 });
+    assert.equal(summary.leverageInfRuns, summary.runs);
+    for (const v of Object.values(summary.leverage)) assert.ok(Number.isFinite(v), 'percentile table must stay finite');
+    assert.ok(summary.samples.every((s) => !Number.isFinite(s.leverage)));
+  });
+
+  it('tracks provision percentiles alongside the other money metrics', async () => {
+    const summary = await runMonteCarlo(base, { ...DEFAULT_MC, runs: 30, seed: 9, intensity: 50 });
+    assert.ok(summary.provision.min <= summary.provision.p50 + 1e-9);
+    assert.ok(summary.provision.p50 <= summary.provision.max + 1e-9);
+    assert.ok(Number.isFinite(summary.provision.mean));
+    assert.equal(summary.samples.length, summary.runs);
   });
 });

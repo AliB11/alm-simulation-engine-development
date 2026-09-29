@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Behavior, DepositSchedule, GlobalConfig, SimInput, Tier } from '../types';
-import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, simulate, uniformVintageCount } from './engine';
+import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, SENS_VARS, simulate, uniformVintageCount } from './engine';
 import { sanitizeState } from './io';
 import { presetInput } from './testUtils';
 
@@ -461,5 +461,28 @@ describe('loan-loss provisioning and write-off', () => {
     assert.equal(result.kpis.totalProvision, 0);
     assert.equal(result.kpis.totalWriteOff, 0);
     assert.ok(result.rows.every((r) => r.provisionCost === 0 && r.writeOff === 0));
+  });
+});
+
+describe('sensitivity — default rate driver', () => {
+  it('exposes the default rate as a bounded sensitivity variable', () => {
+    const def = SENS_VARS.find((v) => v.key === 'defaultRate');
+    assert.ok(def, 'defaultRate must be a sensitivity variable');
+    assert.deepEqual(def!.values(presetInput('sample-2')), [0, 2, 5, 10, 15, 25, 40]);
+    const shocked = applySensitivity(presetInput('sample-2'), 'defaultRate', 25);
+    assert.equal(shocked.config.defaultRate, 25);
+    assert.equal(shocked.behavior.takeUpRate, presetInput('sample-2').behavior.takeUpRate);
+    const clamped = applySensitivity(presetInput('sample-2'), 'defaultRate', 400);
+    assert.equal(clamped.config.defaultRate, 100);
+  });
+
+  it('moves the hole and provision when the default grid is swept', () => {
+    const input = presetInput('sample-2');
+    const grid = runSensitivity(input, 'defaultRate', 'takeUpRate');
+    assert.ok(grid.xs.includes(0));
+    const lo = grid.cells[0][0];
+    const hi = grid.cells[0][grid.cells[0].length - 1];
+    assert.ok(hi.totalProvision >= lo.totalProvision);
+    assert.ok(hi.totalPmtInHorizon <= lo.totalPmtInHorizon + 1e-6);
   });
 });
