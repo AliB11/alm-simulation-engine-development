@@ -271,7 +271,7 @@ export function OptimizerPanel({ input, onApply }: Props) {
                       <LeverChips cand={result.best} />
                     </div>
                     <div className="mt-1.5 text-[10.5px] leading-5 text-slate-500 dark:text-slate-400">
-                      {toFa(result.evaluations)} ارزیابی موتور در {toFa(result.passes)} گذر ·{' '}
+                      {toFa(result.evaluations)} ارزیابی موتور از {toFa(result.starts)} نقطهٔ شروع در {toFa(result.passes)} گذر ·{' '}
                       {fmtNumber(result.elapsedMs, 0)} میلی‌ثانیه
                       {result.anyFeasible ? '' : ' · هیچ طراحی همهٔ قیدها را برآورده نکرد'}
                     </div>
@@ -378,9 +378,10 @@ export function OptimizerPanel({ input, onApply }: Props) {
       )}
 
       <div className="border-t border-slate-100 px-5 py-3 text-[11px] leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        روش حل: <b>جست‌وجوی نزولی مختصاتی</b> روی شبکهٔ گسستهٔ اهرم‌ها با حداکثر سه گذر. موجه بودن (رعایت همهٔ قیدها)
-        اولویت مطلق دارد؛ سپس مقدار هدف بیشینه می‌شود و در تساوی، طراحی نزدیک‌تر به طرح جاری انتخاب می‌شود تا موتور
-        بی‌دلیل پله‌ها را تغییر ندهد. «اعمال» فقط پله‌ها را جایگزین می‌کند؛ پیکربندی کلان و رفتار دست‌نخورده می‌ماند.
+        روش حل: <b>جست‌وجوی نزولی مختصاتی چندشروعی</b> روی شبکهٔ گسستهٔ اهرم‌ها با حداکثر سه گذر از هر نقطهٔ شروع (طرح جاری
+        + کران‌های هر اهرم) تا احتمال گیرافتادن در بهینهٔ محلی کمتر شود. موجه بودن (رعایت همهٔ قیدها) اولویت مطلق دارد؛
+        سپس مقدار هدف بیشینه می‌شود و در تساوی، طراحی نزدیک‌تر به طرح جاری انتخاب می‌شود تا موتور بی‌دلیل پله‌ها را تغییر
+        ندهد. «اعمال» فقط پله‌ها را جایگزین می‌کند؛ پیکربندی کلان و رفتار دست‌نخورده می‌ماند.
       </div>
     </Card>
   );

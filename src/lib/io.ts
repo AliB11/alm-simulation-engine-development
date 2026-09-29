@@ -42,6 +42,8 @@ function sanitizeConfig(v: unknown): GlobalConfig | undefined {
     initialLiquidity: finiteNumber(v.initialLiquidity, DEFAULT_CONFIG.initialLiquidity, -IMPORT_MONEY_MAX, IMPORT_MONEY_MAX),
     releaseReserve: typeof v.releaseReserve === 'boolean' ? v.releaseReserve : DEFAULT_CONFIG.releaseReserve,
     defaultRate: finiteNumber(v.defaultRate, DEFAULT_CONFIG.defaultRate, 0, 100),
+    lgdRate: finiteNumber(v.lgdRate, DEFAULT_CONFIG.lgdRate, 0, 100),
+    writeOffLag: finiteNumber(v.writeOffLag, DEFAULT_CONFIG.writeOffLag, 0, 600, true),
     interbankRate: finiteNumber(v.interbankRate, DEFAULT_CONFIG.interbankRate, 0, IMPORT_RATE_MAX),
     opportunityRate: finiteNumber(v.opportunityRate, DEFAULT_CONFIG.opportunityRate, 0, IMPORT_RATE_MAX),
     depositProfitRate: finiteNumber(v.depositProfitRate, DEFAULT_CONFIG.depositProfitRate, 0, IMPORT_RATE_MAX),
@@ -92,6 +94,9 @@ function sanitizeRegulatory(v: unknown): RegulatoryParams | undefined {
     stressRunoff: finiteNumber(v.stressRunoff, DEFAULT_REGULATORY.stressRunoff, 0, 100),
     stableWeight: finiteNumber(v.stableWeight, DEFAULT_REGULATORY.stableWeight, 0, 100),
     loanWeight: finiteNumber(v.loanWeight, DEFAULT_REGULATORY.loanWeight, 0, 100),
+    wholesaleShare: finiteNumber(v.wholesaleShare, DEFAULT_REGULATORY.wholesaleShare, 0, 100),
+    wholesaleRunoff: finiteNumber(v.wholesaleRunoff, DEFAULT_REGULATORY.wholesaleRunoff, 0, 100),
+    hqlaHaircut: finiteNumber(v.hqlaHaircut, DEFAULT_REGULATORY.hqlaHaircut, 0, 100),
   };
 }
 
@@ -203,6 +208,8 @@ export function buildCashFlowCsv(rows: MonthRow[], factor: number, unit: string)
     `مانده سپرده (${unit})`,
     `مانده تسهیلات (${unit})`,
     `هزینه تامین کسری ماهانه (${unit})`,
+    `هزینه ذخیره مطالبات - غیرنقدی (${unit})`,
+    `سوخت مطالبات از مانده تسهیلات - غیرنقدی (${unit})`,
     `حاشیه تجمعی بانک (${unit})`,
   ];
   const r = (v: number) => Math.round(v * factor);
@@ -228,6 +235,8 @@ export function buildCashFlowCsv(rows: MonthRow[], factor: number, unit: string)
         r(row.depositBalance),
         r(row.loanBook),
         r(row.fundingCost),
+        r(row.provisionCost),
+        r(row.writeOff),
         r(row.cumMargin),
       ].join(','),
     );
@@ -342,6 +351,8 @@ const ZERO_KPIS: SimKpis = {
   peakOutflowMonth: 0,
   totalProfitPaid: 0,
   netInterestIncome: 0,
+  totalProvision: 0,
+  totalWriteOff: 0,
   netMargin: 0,
   marginOnNetDeposit: 0,
 };

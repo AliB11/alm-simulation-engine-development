@@ -2,14 +2,17 @@
  *  DESIGN OPTIMIZER — «طراح معکوس»
  *
  *  کاربر هدف و قیدها را تعیین می‌کند و موتور با جست‌وجوی مختصاتی
- *  (Coordinate Descent) روی چهار اهرم طراحی، بهترین ترکیب را می‌یابد:
+ *  چندشروعی (Multi-Start Coordinate Descent) روی چهار اهرم طراحی،
+ *  بهترین ترکیب را می‌یابد:
  *     1) alphaScale  — مقیاس ضرایب برابری (حجم تسهیلات)
  *     2) tDepShift   — جابه‌جایی دورهٔ انتظار همهٔ پله‌ها (زمان‌بندی خروج)
  *     3) tLoanShift  — جابه‌جازی دورهٔ بازپرداخت (زمان‌بندی ورود اقساط)
  *     4) tilt        — کج‌کردن سهم تخصیص به سمت پله‌های با انتظار بلند/کوتاه
  *
- *  در هر اجرا همهٔ اهرم‌ها یک‌جا روی پله‌های ورودی اعمال می‌شوند (نه
- *  تجمعی در حلقهٔ جست‌وجو)، پس نتیجه کاملاً قطعی و بازتولیدپذیر است.
+ *  جست‌وجو از چند نقطهٔ شروع قطعی (طرح جاری + کران‌های هر اهرم) آغاز
+ *  می‌شود تا احتمال گیرافتادن در بهینهٔ محلی کمتر شود. در هر اجرا همهٔ
+ *  اهرم‌ها یک‌جا روی پله‌های ورودی اعمال می‌شوند (نه تجمعی در حلقهٔ
+ *  جست‌وجو)، پس نتیجه کاملاً قطعی و بازتولیدپذیر است.
  * ------------------------------------------------------------------ */
 
 import type { SimInput, SimKpis, Tier } from '../types';
@@ -66,6 +69,23 @@ export const DEFAULT_CONSTRAINTS: Constraints = {
 
 export const leverKey = (l: DesignLevers): string =>
   `${Math.round(l.alphaScale * 100) / 100}|${Math.round(l.tDepShift)}|${Math.round(l.tLoanShift)}|${l.tilt}`;
+
+/**
+ * نقاط شروع قطعی جست‌وجوی چندشروعی: طرح جاری + کران بالا و پایین هر
+ * اهرم (به‌تنهایی). چون نقطهٔ شروع اول همان طرح جاری است، نتیجهٔ
+ * چندشروعی هرگز از تک‌شروعی بدتر نمی‌شود.
+ */
+export const MULTI_STARTS: DesignLevers[] = [
+  NEUTRAL_LEVERS,
+  { ...NEUTRAL_LEVERS, alphaScale: 60 },
+  { ...NEUTRAL_LEVERS, alphaScale: 200 },
+  { ...NEUTRAL_LEVERS, tDepShift: -3 },
+  { ...NEUTRAL_LEVERS, tDepShift: 6 },
+  { ...NEUTRAL_LEVERS, tLoanShift: -18 },
+  { ...NEUTRAL_LEVERS, tLoanShift: 24 },
+  { ...NEUTRAL_LEVERS, tilt: 'longWait' },
+  { ...NEUTRAL_LEVERS, tilt: 'shortWait' },
+];
 
 /** فاصله از طراحی پایه — برای شکستن تساوی تا موتور بی‌دلیل طرح را تغییر ندهد */
 export function leverDistance(l: DesignLevers): number {
@@ -163,6 +183,8 @@ export interface OptimizationResult {
   evaluations: number;
   elapsedMs: number;
   passes: number;
+  /** تعداد نقاط شروعی که جست‌وجو از آن‌ها انجام شد */
+  starts: number;
   improved: boolean;
   anyFeasible: boolean;
 }
@@ -195,6 +217,8 @@ export interface OptimizeOptions {
   constraints: Constraints;
   passes?: number;
   topN?: number;
+  /** جست‌وجو از چند نقطهٔ شروع (پیش‌فرض: فعال)؛ false یعنی همان تک‌شروع از طرح جاری */
+  multiStart?: boolean;
 }
 
 export function optimizeDesign(input: SimInput, opts: OptimizeOptions): OptimizationResult {
@@ -202,6 +226,7 @@ export function optimizeDesign(input: SimInput, opts: OptimizeOptions): Optimiza
   const passes = Math.max(1, Math.round(finite(opts.passes, 2)));
   const topN = Math.max(1, Math.round(finite(opts.topN, 6)));
   const { objective, constraints } = opts;
+  const starts = opts.multiStart === false ? [NEUTRAL_LEVERS] : MULTI_STARTS;
 
   const pool = new Map<string, CandidateDesign>();
   const evalLevers = (l: DesignLevers): CandidateDesign => {
@@ -217,21 +242,25 @@ export function optimizeDesign(input: SimInput, opts: OptimizeOptions): Optimiza
   let current = baseline;
   let usedPasses = 0;
 
-  for (let pass = 0; pass < passes; pass++) {
-    usedPasses = pass + 1;
-    let improvedThisPass = false;
-    for (const dim of ['alphaScale', 'tDepShift', 'tLoanShift', 'tilt'] as const) {
-      let best = current;
-      for (const v of LEVER_GRID[dim]) {
-        const cand = evalLevers({ ...current.levers, [dim]: v });
-        if (better(cand, best)) best = cand;
+  for (const start of starts) {
+    let cursor = evalLevers(start);
+    for (let pass = 0; pass < passes; pass++) {
+      usedPasses = Math.max(usedPasses, pass + 1);
+      let improvedThisPass = false;
+      for (const dim of ['alphaScale', 'tDepShift', 'tLoanShift', 'tilt'] as const) {
+        let best = cursor;
+        for (const v of LEVER_GRID[dim]) {
+          const cand = evalLevers({ ...cursor.levers, [dim]: v });
+          if (better(cand, best)) best = cand;
+        }
+        if (best.key !== cursor.key) {
+          cursor = best;
+          improvedThisPass = true;
+        }
       }
-      if (best.key !== current.key) {
-        current = best;
-        improvedThisPass = true;
-      }
+      if (!improvedThisPass) break;
     }
-    if (!improvedThisPass) break;
+    if (better(cursor, current)) current = cursor;
   }
 
   const all = [...pool.values()];
@@ -254,6 +283,7 @@ export function optimizeDesign(input: SimInput, opts: OptimizeOptions): Optimiza
     evaluations: pool.size,
     elapsedMs,
     passes: usedPasses,
+    starts: starts.length,
     improved: current.key !== baseline.key,
     anyFeasible,
   };

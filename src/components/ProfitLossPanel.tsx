@@ -12,6 +12,7 @@ interface Datum {
   income: number;
   profit: number;
   funding: number;
+  provision: number;
   margin: number;
 }
 
@@ -45,6 +46,7 @@ function MarginTooltip({ active, payload }: { active?: boolean; payload?: Readon
       <Row label="درآمد کارمزد/سود وصولی" value={d.income} color="#10b981" />
       <Row label="سود پرداختی سپرده" value={d.profit} color="#a855f7" />
       <Row label="هزینه تأمین کسری" value={d.funding} color="#f43f5e" />
+      <Row label="هزینه ذخیره مطالبات (غیرنقدی)" value={d.provision} color="#f59e0b" />
       <div className="mt-1 border-t border-slate-100 pt-1 dark:border-slate-800">
         <Row label="حاشیهٔ تجمعی بانک" value={d.margin} strong />
       </div>
@@ -63,13 +65,14 @@ function Tile({
   icon: ReactNode;
   label: string;
   value: number;
-  tone: 'emerald' | 'violet' | 'rose';
+  tone: 'emerald' | 'violet' | 'rose' | 'amber';
   hint: string;
 }) {
   const tones = {
     emerald: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
     violet: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10',
     rose: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10',
+    amber: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10',
   } as const;
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/60">
@@ -90,7 +93,8 @@ function Tile({
 /**
  * صورت سود و زیان شبیه‌سازی‌شده در افق:
  *   درآمد کارمزد/سود وصولی − سود پرداختی به سپرده‌گذاران − هزینهٔ تأمین کسری از بین‌بانکی
- * نرخ سود سپرده صفر (پیش‌فرض) این لایه را کاملاً خنثی نگه می‌دارد.
+ *   − هزینهٔ ذخیره مطالبات مشکوک‌الوصول (غیرنقدی)
+ * نرخ سود سپرده صفر (پیش‌فرض) لایهٔ سود سپرده و نرخ نکول صفر لایهٔ ذخیره را کاملاً خنثی نگه می‌دارد.
  */
 export function ProfitLossPanel({ result, config }: { result: SimResult; config: GlobalConfig }) {
   const { dark, factor, unit } = useDisplay();
@@ -104,12 +108,16 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
         income: r.incomeIn * factor,
         profit: -r.profitPaid * factor,
         funding: -r.fundingCost * factor,
+        provision: -r.provisionCost * factor,
         margin: r.cumMargin * factor,
       })),
     [result.rows, factor],
   );
 
-  const flowMax = Math.max(1, ...data.map((d) => Math.max(Math.abs(d.income), Math.abs(d.profit), Math.abs(d.funding))));
+  const flowMax = Math.max(
+    1,
+    ...data.map((d) => Math.max(Math.abs(d.income), Math.abs(d.profit), Math.abs(d.funding), Math.abs(d.provision))),
+  );
   const flowUnit = axisUnit(flowMax);
   const marginUnit = axisUnit(Math.max(1, ...data.map((d) => Math.abs(d.margin))));
   const positive = k.netMargin >= 0;
@@ -139,7 +147,7 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
         }
       />
 
-      <div className="grid gap-3 p-5 pb-4 sm:grid-cols-3">
+      <div className="grid gap-3 p-5 pb-4 sm:grid-cols-2 lg:grid-cols-4">
         <Tile
           icon={<Receipt />}
           tone="emerald"
@@ -152,7 +160,7 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
           tone="violet"
           label="سود پرداختی به سپرده‌گذاران"
           value={k.totalProfitPaid}
-          hint={`ماندهٔ پایان هر ماه × ${fmtPct(config.depositProfitRate, 1)} ÷ ۱۲`}
+          hint={`میانگین ماندهٔ ماهانه × ${fmtPct(config.depositProfitRate, 1)} ÷ ۱۲`}
         />
         <Tile
           icon={<Coins />}
@@ -160,6 +168,13 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
           label="هزینهٔ تأمین کسری نقدینگی"
           value={k.interbankCost}
           hint={`Σ کسری تجمعی × ${fmtPct(config.interbankRate, 1)} ÷ ۱۲`}
+        />
+        <Tile
+          icon={<Coins />}
+          tone="amber"
+          label="هزینهٔ ذخیره مطالبات (غیرنقدی)"
+          value={k.totalProvision}
+          hint={`وام × ${fmtPct(config.defaultRate, 1)} نکول × ${fmtPct(config.lgdRate, 1)} LGD`}
         />
       </div>
 
@@ -181,7 +196,7 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
             {positive ? 'حاشیهٔ خالص مثبت در پایان افق' : 'حاشیهٔ خالص منفی — محصول زیان‌ده است'}
           </div>
           <div dir="ltr" className="mt-0.5 text-left font-mono text-[10.5px] text-slate-500 dark:text-slate-400">
-            Net Margin = Fee/Profit Income − Deposit Profit − Interbank Funding Cost
+            Net Margin = Fee/Profit Income − Deposit Profit − Interbank Funding Cost − Loan-Loss Provision
           </div>
         </div>
         <div className="text-left">
@@ -213,6 +228,9 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> هزینهٔ تأمین کسری (ماهانه)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> ذخیره مطالبات (ماهانه، غیرنقدی)
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-4 rounded-full bg-indigo-500" /> حاشیهٔ تجمعی (محور راست)
@@ -257,6 +275,7 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
             <Bar yAxisId="flow" dataKey="income" stackId="s" fill="#10b981" maxBarSize={22} isAnimationActive={false} />
             <Bar yAxisId="flow" dataKey="profit" stackId="s" fill="#a855f7" maxBarSize={22} isAnimationActive={false} />
             <Bar yAxisId="flow" dataKey="funding" stackId="s" fill="#f43f5e" maxBarSize={22} isAnimationActive={false} />
+            <Bar yAxisId="flow" dataKey="provision" stackId="s" fill="#f59e0b" maxBarSize={22} isAnimationActive={false} />
             <Line
               yAxisId="margin"
               type="monotone"
@@ -271,9 +290,10 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
       </div>
 
       <div className="border-t border-slate-100 px-5 py-3 text-[11px] leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        سود سپرده در پایان هر ماه روی <b>ماندهٔ پایان دورهٔ همان ماه</b> محاسبه می‌شود و یک خروجی نقد واقعی است؛ بنابراین هم
-        بر حاشیهٔ سود و هم بر نقطهٔ واژگونی و حداکثر کسری نقدینگی اثر می‌گذارد. نرخ صفر (پیش‌فرض) این جریان را کاملاً خنثی
-        می‌کند.
+        سود سپرده هر ماه روی <b>میانگین ماندهٔ ماهانه</b> ((ماندهٔ ابتدا + انتهای ماه) ÷ ۲) محاسبه می‌شود و یک خروجی نقد واقعی
+        است؛ بنابراین هم بر حاشیهٔ سود و هم بر نقطهٔ واژگونی و حداکثر کسری نقدینگی اثر می‌گذارد. نرخ صفر (پیش‌فرض) این جریان
+        را کاملاً خنثی می‌کند. هزینهٔ ذخیره مطالبات (وام × نکول × LGD) در ماه اعطا شناسایی می‌شود ولی غیرنقدی است: فقط حاشیه
+        را کاهش می‌دهد و وارد جریان نقد نمی‌شود.
       </div>
     </Card>
   );

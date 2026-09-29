@@ -21,8 +21,9 @@
 - **Cohort / Vintage cash-flow matrix** — configurable horizon (12–120 months) with lump / uniform / custom deposit scheduling.
 - **Double Liquidity Drain** — simultaneous loan commitment + deposit runoff at maturity (per CBI no-blocking rule).
 - **Live risk KPIs** — tipping point, maximum liquidity hole, leverage ratio, interbank funding cost, recovery month.
-- **Simulated P&L** — fee/profit income collected, deposit profit paid on closing balances, interbank funding cost and the
-  resulting **net margin** (with a monthly income/expense/cumulative-margin chart). Neutral at `r_dep = 0`.
+- **Simulated P&L** — fee/profit income collected, deposit profit paid on average monthly balances, interbank funding cost,
+  non-cash loan-loss provisions and the resulting **net margin** (with a monthly income/expense/cumulative-margin chart).
+  Neutral at `r_dep = 0` and `δ = 0`.
 - **Interactive charts** (Recharts) — cumulative liquidity (green/red split at zero), inflow vs. outflow, simulated balance sheet.
 - **2-D stress / sensitivity heatmap** — each cell is a full re-simulation across two of 8 risk variables
   (take-up, approval, runoff, churn, reserve ratio, α scale, price, deposit profit) × 5 metrics
@@ -38,11 +39,11 @@
   rate (IRR) and the customer's real cost after the opportunity cost of waiting.
 - **Cash-flow CSV + general-ledger CSV export** — the monthly matrix, or one signed row per tier/vintage event that
   reconciles exactly to `CumLiq(H)` for Excel / BI review.
-- **Inverse tier designer** — coordinate search over α scale, waiting period, repayment and allocation tilt, subject to
-  liquidity, leverage and margin constraints, with one-click apply.
+- **Inverse tier designer** — multi-start coordinate search over α scale, waiting period, repayment and allocation tilt,
+  subject to liquidity, leverage and margin constraints, with one-click apply.
 - **Monte Carlo / VaR** — seeded, reproducible draws of behavioral inputs; P(tipping), P(loss), P5–P99 and load-worst-run.
-- **Regulatory-style proxies** — monthly LCR, NSFR at month 12 and the asset/liability maturity gap, with user-set weights.
-  These are educational stand-ins, not official supervisor calculations.
+- **Regulatory-style proxies** — monthly LCR (with retail/wholesale runoff split and HQLA haircut), NSFR at month 12 and
+  the asset/liability maturity gap, with user-set weights. These are educational stand-ins, not official supervisor calculations.
 - **Maturity ladder + tier attribution** — when principal returns versus when deposits leave, and which tier builds the hole
   (analytic removal, no extra simulation).
 - **Methodology panel** — every formula shown with live-substituted values.
@@ -87,17 +88,19 @@
 
 ### هـ) صورت سود و زیان شبیه‌سازی‌شده
 
-- سود پرداختی سپرده: `Profit_t = DepositBalance_t × r_dep / 12` (پایان هر ماه، روی ماندهٔ پایان دوره)
+- سود پرداختی سپرده: `Profit_t = AvgBalance_t × r_dep / 12` که `AvgBalance_t = (ماندهٔ ابتدای ماه + ماندهٔ پایان ماه) / ۲` (ماه‌شمار)
 - `Outflows_t = Σ Commitment + Σ Withdrawal + Profit_t` — یعنی سود سپرده یک خروجی نقد واقعی است و بر نقطهٔ واژگونی هم اثر می‌گذارد
 - درآمد خالص: `NII = Σ_t Income_t − Σ_t Profit_t`
-- حاشیهٔ خالص: `Margin = NII − Σ_t max(0, −CumLiq_t) × r_ib / 12`
-- حاشیهٔ تجمعی ماهانه: `Margin_t = Margin_(t−1) + Income_t − Profit_t − FundingCost_t`
+- ذخیرهٔ زیان موردانتظار: `Provision = Σ L × δ × LGD` در ماه اعطا شناسایی می‌شود (غیرنقدی — فقط حاشیه) و اصل وصول‌نشده در ماه `T_dep + T_loan + مهلت‌سوخت` از مانده تسهیلات خارج می‌گردد
+- حاشیهٔ خالص: `Margin = NII − Σ_t max(0, −CumLiq_t) × r_ib / 12 − Σ_t Provision_t`
+- حاشیهٔ تجمعی ماهانه: `Margin_t = Margin_(t−1) + Income_t − Profit_t − FundingCost_t − Provision_t`
 
 ### و) سنجه‌های مقرراتی‌مانند (آموزشی، نه رسمی)
 
-ضرایب `ω` (خروج استرس)، `w` (پایداری منابع) و `r` (نیاز به تأمین دارایی) ورودی کاربرند و پیش‌فرض‌شان به‌ترتیب ۵٪، ۹۰٪ و ۸۵٪ است.
+ضرایب `ω` (خروج استرس خرد)، `w` (پایداری منابع) و `r` (نیاز به تأمین دارایی) ورودی کاربرند و پیش‌فرض‌شان به‌ترتیب ۵٪، ۹۰٪ و ۸۵٪ است؛
+سهم سپردهٔ کلان `s` (پیش‌فرض ۰٪) با نرخ خروج استرس جداگانهٔ `ω_w` (پیش‌فرض ۲۵٪) و تنزیل دارایی نقد `h` (پیش‌فرض ۰٪) نیز ورودی کاربرند.
 
-- `LCR_t = max(0, CumLiq_t) / (Outflow_t + ω × DepositBalance_t) × 100` — ماه بدون خروج، پوشش نامحدود (`∞`) است و از کمینه کنار گذاشته می‌شود
+- `ω_eff = (1 − s) × ω + s × ω_w` و `LCR_t = max(0, CumLiq_t) × (1 − h) / (Outflow_t + ω_eff × DepositBalance_t) × 100` — ماه بدون خروج، پوشش نامحدود (`∞`) است و از کمینه کنار گذاشته می‌شود
 - `NSFR_m = (DepositBalance_m × w) / (LoanBook_m × r) × 100` با `m = 12` (یا آخرین ماه، اگر افق کوتاه‌تر باشد)
 - `WAL = Σ t × Flow_t / Σ Flow_t` و `Gap = WAL(دارایی) − WAL(تعهدات)`
 - سمت دارایی روی بازگشت اصل سرمایه و سمت تعهد روی **همان خروجی نردبان** (`برداشت + سود پرداختی سپرده`) وزن می‌شود؛
@@ -131,7 +134,7 @@
 
 ### ط) بهینه‌یاب طراحی
 
-جست‌وجوی نزولی مختصاتی روی شبکهٔ گسستهٔ چهار اهرم، حداکثر سه گذر. موجه بودن (رعایت همهٔ قیدها) بر مقدار هدف اولویت دارد و در تساوی، طرح نزدیک‌تر به طراحی جاری انتخاب می‌شود. ضریب برابری حاصل از سقف سازندهٔ پله (۵۰۰٪) فراتر نمی‌رود تا طرحِ اعمال‌شده قابل ویرایش و قابل ورود مجدد باشد.
+جست‌وجوی نزولی مختصاتی چندشروعی روی شبکهٔ گسستهٔ چهار اهرم (از طرح جاری و کران‌های هر اهرم)، حداکثر سه گذر از هر نقطهٔ شروع. موجه بودن (رعایت همهٔ قیدها) بر مقدار هدف اولویت دارد و در تساوی، طرح نزدیک‌تر به طراحی جاری انتخاب می‌شود. ضریب برابری حاصل از سقف سازندهٔ پله (۵۰۰٪) فراتر نمی‌رود تا طرحِ اعمال‌شده قابل ویرایش و قابل ورود مجدد باشد.
 
 </div>
 
@@ -252,9 +255,12 @@ src/
   نتیجه دقیقاً با فرمول پایه یکسان می‌شود.
 - **نرمال‌سازی تخصیص**: اگر مجموع سهم پله‌ها ۱۰۰٪ نباشد، سهم‌ها در محاسبات به‌طور خودکار نرمال می‌شوند و هشدار نمایش داده می‌شود.
 - **گزینه‌های خنثی به‌صورت پیش‌فرض**: آزادسازی سپرده قانونی (خاموش)، نرخ نکول اقساط (۰) و نرخ سود پرداختی سپرده (۰).
-- **سود پرداختی سپرده**: روی ماندهٔ پایان دورهٔ هر ماه محاسبه می‌شود (نه معدل ماهانه) تا برای ورود یکجا در ماه صفر، دقیقاً
-  به تعداد ماه‌های ماندگاری سود شناسایی شود. نمونهٔ سوم برای نمایش این اثر، نرخ ۲۰٫۵٪ را به‌صورت پیش‌فرض فعال می‌کند؛
+- **سود پرداختی سپرده**: ماه‌شمار روی میانگین ماندهٔ ماهانه ((ابتدا + انتهای ماه) ÷ ۲) محاسبه می‌شود تا واریز و برداشت‌های
+  میانی ماه نیز به‌طور منصفانه سود بگیرند. نمونهٔ سوم برای نمایش این اثر، نرخ ۲۰٫۵٪ را به‌صورت پیش‌فرض فعال می‌کند؛
   دو نمونهٔ قرض‌الحسنه بدون سود (۰٪) هستند.
+- **ذخیره و سوخت نکول**: اقساط وصول‌نشده از ورودی نقد کسر می‌شوند؛ هم‌زمان ذخیرهٔ زیان موردانتظار (وام × نکول × LGD) در ماه
+  اعطا به‌صورت غیرنقدی در حاشیه شناسایی و اصل وصول‌نشده پس از سررسید آخرین قسط + مهلت سوخت، از مانده تسهیلات خارج می‌شود.
+  نرخ نکول صفر (پیش‌فرض هر سه نمونه) این لایه را کاملاً خنثی نگه می‌دارد.
 - **حداقل مانده پله**: موتور تجمیعی فقط در صورت رسیدن میانگین سپردهٔ مشتری نمونه به حداقل مانده، تعهد وام را برای آن حالت لحاظ می‌کند. محاسبه‌گر مشتری نیز همان شرط را برای ماندهٔ واردشده اعمال می‌کند.
 - **پله بدون اعطا**: پله‌ای که وامی اعطا نمی‌کند (حداقل مانده برآورده نشده یا `α_eff = 0`) وام‌گیرنده‌ای هم ندارد؛ بنابراین خروج سپرده‌اش فقط با `ω_churn` برآورد می‌شود و تعداد وام‌گیرندهٔ آن صفر گزارش می‌گردد (در جدول تعهدات با نشان «بدون اعطا» مشخص است).
 - **بهداشت ورودی موتور**: همهٔ ورودی‌های عددی (پله، پیکربندی، رفتار، زمان‌بندی) پیش از محاسبه با `finite`/`bounded` پالایش می‌شوند؛ یک مقدار `NaN`/خالی نمی‌تواند کل ماتریس و شاخص‌ها را `NaN` کند و داشبورد به‌اشتباه «پایدار» نشان دهد.

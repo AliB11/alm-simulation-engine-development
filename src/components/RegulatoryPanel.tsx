@@ -136,7 +136,7 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
 
       <div className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-3 dark:border-slate-800">
         <SliderField
-          label="خروج استرس‌شدهٔ سپرده"
+          label="خروج استرس سپردهٔ خرد"
           symbol="ω"
           value={params.stressRunoff}
           onChange={(v) => onParams({ stressRunoff: v })}
@@ -145,7 +145,7 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
           step={0.5}
           color="#f43f5e"
           icon={<Droplets />}
-          hint="درصد اضافی از ماندهٔ سپرده که در سناریوی استرس، خروج فرض می‌شود"
+          hint="درصد اضافی از ماندهٔ سپردهٔ خرد که در سناریوی استرس، خروج فرض می‌شود"
         />
         <SliderField
           label="ضریب پایداری منابع (ASF)"
@@ -170,6 +170,45 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
           color="#6366f1"
           icon={<Ruler />}
           hint="سهمی از ماندهٔ تسهیلات که باید با منابع پایدار تأمین شود"
+        />
+      </div>
+
+      <div className="grid gap-3 border-b border-slate-100 p-5 pt-4 sm:grid-cols-3 dark:border-slate-800">
+        <SliderField
+          label="سهم سپردهٔ کلان/شرکتی"
+          symbol="s"
+          value={params.wholesaleShare}
+          onChange={(v) => onParams({ wholesaleShare: v })}
+          min={0}
+          max={100}
+          step={1}
+          color="#f59e0b"
+          icon={<Droplets />}
+          hint="سهم سپرده‌های کلان از مانده؛ خروج استرس آن‌ها با نرخ جداگانه وزن می‌شود"
+        />
+        <SliderField
+          label="خروج استرس سپردهٔ کلان"
+          symbol="ω_w"
+          value={params.wholesaleRunoff}
+          onChange={(v) => onParams({ wholesaleRunoff: v })}
+          min={0}
+          max={100}
+          step={1}
+          color="#ef4444"
+          icon={<Droplets />}
+          hint={`نرخ خروج استرس سپردهٔ کلان — نرخ مؤثر ترکیبی: ${fmtPct(reg.effStressRunoff, 1)}`}
+        />
+        <SliderField
+          label="تنزیل دارایی نقد (Haircut)"
+          symbol="h"
+          value={params.hqlaHaircut}
+          onChange={(v) => onParams({ hqlaHaircut: v })}
+          min={0}
+          max={50}
+          step={0.5}
+          color="#8b5cf6"
+          icon={<ShieldCheck />}
+          hint="درصد تنزیل مازاد نقدینگی در صورت‌حساب LCR (کیفیت پایین‌تر دارایی نقد)"
         />
       </div>
 
@@ -288,18 +327,22 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
 
       <div className="space-y-2 border-t border-slate-100 px-5 py-3.5 text-[11px] leading-6 text-slate-500 dark:border-slate-800 dark:text-slate-400">
         <div dir="ltr" className="text-left font-mono text-[10.5px] text-slate-500 dark:text-slate-400">
-          LCR(t) = max(0, CumLiq(t)) ÷ [ Outflow(t) + ω × DepositBalance(t) ] × 100
+          LCR(t) = max(0, CumLiq(t)) × (1 − h) ÷ [ Outflow(t) + ω_eff × DepositBalance(t) ] × 100
+          <br />
+          ω_eff = (1 − s) × ω_retail + s × ω_wholesale
           <br />
           NSFR(m) = [ DepositBalance(m) × w ] ÷ [ LoanBook(m) × r ] × 100 &nbsp;(m = 12)
           <br />
           WAL = Σ t × Flow(t) ÷ Σ Flow(t) &nbsp;·&nbsp; Gap = WAL(assets) − WAL(liabilities)
         </div>
         <div>
-          در محاسبهٔ LCR، «دارایی نقد» همان مازاد نقدینگی تجمعی مثبت است؛ ماه‌هایی که خروج خالص ندارند (پوشش نامحدود)
-          از محاسبهٔ کمینه کنار گذاشته می‌شوند. در WAL تعهدات، ماندهٔ سپرده‌ای که تا پایان افق زنده می‌ماند به‌عنوان
-          تعهدی با سررسید باز در ماه آخر لحاظ می‌شود. ضریب پیش‌فرض‌ها: خروج استرس {fmtPct(DEFAULT_REGULATORY.stressRunoff, 1)}،
-          پایداری منابع {fmtPct(DEFAULT_REGULATORY.stableWeight, 0)} و نیاز به تأمین{' '}
-          {fmtPct(DEFAULT_REGULATORY.loanWeight, 0)} — همه قابل تغییر توسط شما و بدون هیچ عدد ثابت در موتور.
+          در محاسبهٔ LCR، «دارایی نقد» همان مازاد نقدینگی تجمعی مثبت پس از تنزیل (haircut) است و خروج استرس با نرخ مؤثر
+          ترکیبی سپردهٔ خرد و کلان وزن می‌شود؛ ماه‌هایی که خروج خالص ندارند (پوشش نامحدود) از محاسبهٔ کمینه کنار گذاشته
+          می‌شوند. در WAL تعهدات، ماندهٔ سپرده‌ای که تا پایان افق زنده می‌ماند به‌عنوان تعهدی با سررسید باز در ماه آخر لحاظ
+          می‌شود. ضریب پیش‌فرض‌ها: خروج استرس خرد {fmtPct(DEFAULT_REGULATORY.stressRunoff, 1)}، پایداری منابع{' '}
+          {fmtPct(DEFAULT_REGULATORY.stableWeight, 0)}، نیاز به تأمین {fmtPct(DEFAULT_REGULATORY.loanWeight, 0)}، سهم کلان{' '}
+          {fmtPct(DEFAULT_REGULATORY.wholesaleShare, 0)} و تنزیل {fmtPct(DEFAULT_REGULATORY.hqlaHaircut, 0)} — همه قابل تغییر
+          توسط شما و بدون هیچ عدد ثابت در موتور.
           <br />
           <b className="text-slate-600 dark:text-slate-300">
             این سنجه‌ها نسخهٔ ساده‌شده و آموزشی‌اند و جایگزین تعاریف رسمی کمیتهٔ بال یا الزامات ناظر داخلی نیستند.
