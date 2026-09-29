@@ -190,6 +190,7 @@ export interface McSample {
   leverage: number;
   tipping: number | null;
   interbankCost: number;
+  provision: number;
 }
 
 export interface PercentileSet {
@@ -219,7 +220,10 @@ export interface McSummary {
   endCum: PercentileSet;
   netMargin: PercentileSet;
   leverage: PercentileSet;
+  /** تعداد اجراهایی که اهرم خروج در آن‌ها نامتناهی شد (منابع خالص صفر) و از صدک‌های اهرم کنار گذاشته شدند */
+  leverageInfRuns: number;
   interbankCost: PercentileSet;
+  provision: PercentileSet;
   samples: McSample[];
   worst: McRun | null;
   best: McRun | null;
@@ -256,9 +260,12 @@ export function summarizeMc(runs: McRun[], o: McOptions, elapsedMs: number): McS
     maxHole: r.kpis.maxHole,
     endCum: r.kpis.endCum,
     netMargin: r.kpis.netMargin,
-    leverage: Number.isFinite(r.kpis.leverage) ? r.kpis.leverage : Number.MAX_VALUE,
+    // اهرم نامتناهی دست‌نخورده می‌ماند تا stats() آن را از صدک‌ها کنار بگذارد؛
+    // نگاشت به MAX_VALUE یک عدد ۳۰۹ رقمی در جدول صدک‌ها چاپ می‌کرد.
+    leverage: r.kpis.leverage,
     tipping: r.kpis.tippingPoint,
     interbankCost: r.kpis.interbankCost,
+    provision: r.kpis.totalProvision,
   }));
 
   let tipping = 0;
@@ -269,6 +276,8 @@ export function summarizeMc(runs: McRun[], o: McOptions, elapsedMs: number): McS
     if (r.kpis.maxHole > 0) deficit++;
     if (r.kpis.netMargin < 0) loss++;
   }
+
+  const leverageInfRuns = samples.filter((s) => !Number.isFinite(s.leverage)).length;
 
   let worst: McRun | null = null;
   let best: McRun | null = null;
@@ -289,7 +298,9 @@ export function summarizeMc(runs: McRun[], o: McOptions, elapsedMs: number): McS
     endCum: stats(samples.map((s) => s.endCum)),
     netMargin: stats(samples.map((s) => s.netMargin)),
     leverage: stats(samples.map((s) => s.leverage)),
+    leverageInfRuns,
     interbankCost: stats(samples.map((s) => s.interbankCost)),
+    provision: stats(samples.map((s) => s.provision)),
     samples,
     worst,
     best,

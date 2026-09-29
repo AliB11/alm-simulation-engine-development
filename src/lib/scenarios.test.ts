@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { configDiffs, snapshotSlot, SLOT_META } from './scenarios';
+import { configDiffs, KPI_ROWS, snapshotSlot, SLOT_META } from './scenarios';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
 
@@ -40,5 +40,64 @@ describe('scenario comparison helpers', () => {
     const a = snapshotSlot('A', input, kpis, 'یک');
     const b = snapshotSlot('B', input, kpis, 'دو');
     assert.deepEqual(configDiffs(a, b), []);
+  });
+});
+
+describe('scenario diff coverage', () => {
+  it('reports npl, liquidity, schedule and tier-pricing differences', () => {
+    const a = presetInput('sample-2');
+    const b = structuredClone(a);
+    b.config.initialLiquidity = 1_000_000;
+    b.config.releaseReserve = true;
+    b.config.lgdRate = 50;
+    b.config.writeOffLag = 3;
+    b.config.opportunityRate = 30;
+    b.behavior = { ...b.behavior, avgTicket: 50_000_000 };
+    b.schedule = { ...b.schedule, mode: 'uniform', uniformMonths: 24 };
+    b.tiers = b.tiers.map((t, i) =>
+      i === 0 ? { ...t, minBalance: 9_000_000, rateOverride: 7 } : t,
+    );
+    const ka = simulate(a, false).kpis;
+    const kb = simulate(b, false).kpis;
+    const diffs = configDiffs(snapshotSlot('A', a, ka, 'الف'), snapshotSlot('B', b, kb, 'ب'));
+    for (const label of [
+      'نقدینگی اولیه',
+      'آزادسازی سپرده قانونی',
+      'LGD',
+      'مهلت سوخت',
+      'هزینه فرصت',
+      'میانگین سپرده',
+      'زمان‌بندی ورود',
+      'ماه‌های توزیع یکنواخت',
+      'حداقل مانده',
+      'نرخ اختصاصی',
+    ]) {
+      assert.ok(diffs.some((d) => d.includes(label)), `missing diff for ${label}: ${diffs.join(' | ')}`);
+    }
+    assert.ok(diffs.every((d) => !/\d/.test(d)), 'diffs must not leak Latin digits');
+  });
+
+  it('compares loan-loss provision and write-off across scenarios', () => {
+    const keys = KPI_ROWS.map((r) => r.key);
+    assert.ok(keys.includes('totalProvision'));
+    assert.ok(keys.includes('totalWriteOff'));
+  });
+
+  it('flags custom-vintage composition changes', () => {
+    const a = presetInput('sample-2');
+    const b = structuredClone(a);
+    b.schedule = {
+      mode: 'custom',
+      uniformMonths: 12,
+      custom: [
+        { id: 'x', month: 0, share: 70 },
+        { id: 'y', month: 2, share: 30 },
+      ],
+    };
+    const ka = simulate(a, false).kpis;
+    const kb = simulate(b, false).kpis;
+    const diffs = configDiffs(snapshotSlot('A', a, ka, 'الف'), snapshotSlot('B', b, kb, 'ب'));
+    assert.ok(diffs.some((d) => d.includes('زمان‌بندی ورود')));
+    assert.ok(diffs.some((d) => d.includes('ترکیب ویژه‌های سفارشی')));
   });
 });

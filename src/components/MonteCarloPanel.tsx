@@ -46,13 +46,14 @@ interface Props {
   ) => void;
 }
 
-type McMetric = 'maxHole' | 'endCum' | 'netMargin' | 'leverage';
+type McMetric = 'maxHole' | 'endCum' | 'netMargin' | 'leverage' | 'provision';
 
 const METRICS: { value: McMetric; label: string; kind: 'money' | 'ratio' }[] = [
   { value: 'maxHole', label: 'حداکثر کسری', kind: 'money' },
   { value: 'endCum', label: 'تراز پایان افق', kind: 'money' },
   { value: 'netMargin', label: 'حاشیهٔ خالص', kind: 'money' },
   { value: 'leverage', label: 'اهرم خروج', kind: 'ratio' },
+  { value: 'provision', label: 'هزینهٔ ذخیره', kind: 'money' },
 ];
 
 const PERCENTILES: { key: keyof PercentileSet; label: string }[] = [
@@ -209,7 +210,9 @@ export function MonteCarloPanel({ input, onLoadRun }: Props) {
               ? summary.endCum
               : m.value === 'netMargin'
                 ? summary.netMargin
-                : summary.leverage,
+                : m.value === 'provision'
+                  ? summary.provision
+                  : summary.leverage,
       }))
     : [];
 
@@ -457,9 +460,15 @@ export function MonteCarloPanel({ input, onLoadRun }: Props) {
                 </table>
               </div>
               <div className="text-[10.5px] text-slate-400">
-                ارقام پولی به {unit} · ستون‌های P95 و P99 دنبالۀ چپ توزیع ریسک‌اند (بدترین حالت‌ها)
+                ارقام پولی به {unit} · ستون‌های P95 و P99 دنبالۀ بالای توزیع ریسک‌اند (بدترین حالت‌ها)
               </div>
 
+              {summary.leverageInfRuns > 0 && (
+                <div className="text-[10.5px] text-slate-400">
+                  {toFa(summary.leverageInfRuns)} اجرا اهرم نامتناهی داشتند (منابع خالص صفر) و از صدک‌های اهرم کنار
+                  گذاشته شدند؛ در هیستوگرام اهرم، این اجراها در ستون ۱٬۰۰۰٬۰۰۰× تجمیع شده‌اند.
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] text-slate-400">
                 <span>هیستوگرام توزیع {metricDef.label} در {toFa(summary.runs)} اجرا</span>
                 <span>محور افقی: {metricDef.kind === 'ratio' ? 'مقدار اهرم' : histUnit.label || 'مقدار'} · محور عمودی: تعداد اجرا</span>

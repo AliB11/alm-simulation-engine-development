@@ -140,6 +140,8 @@ export const DEFAULT_CONFIG: GlobalConfig = {
   initialLiquidity: 0,
   releaseReserve: false,
   defaultRate: 0,
+  lgdRate: 100,
+  writeOffLag: 12,
   interbankRate: 23,
   opportunityRate: 23,
   depositProfitRate: 0,

@@ -174,7 +174,7 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             }
           >
             <Formula live={`RR = ${p(RR)}  →  Net deposits = ${m(k.totalDeposit)} × ${p(1 - RR)} = ${m(k.netDeposit)}`}>
-              Inflows_t = D_new,t × (1 − RR) + Σ_k PMT_k,t
+              Inflows_t = D_new,t × (1 − RR) + Σ_k PMT_k,t + Release_t
             </Formula>
             <Formula
               live={`Σ Commitments = ${m(k.totalCommitment)}  |  Σ Withdrawals = ${m(k.totalWithdrawal)}  |  Σ Deposit profit = ${m(k.totalProfitPaid)}`}
@@ -198,7 +198,9 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             <Formula live={k.tippingPoint === null ? 'Tipping Point = none (CumLiq ≥ 0 ∀t)' : `Tipping Point = month ${toFa(k.tippingPoint)}`}>
               Tipping Point = min{'{'} t : CumLiq_t {'<'} 0 {'}'}
             </Formula>
-            <Formula live={`min(CumLiq) = ${m(k.minCum)} at month ${toFa(k.minCumMonth)}`}>Max Liquidity Hole = min_t (CumLiq_t)</Formula>
+            <Formula live={`maxHole = ${m(k.maxHole)} = −min(0, min CumLiq); min at month ${toFa(k.minCumMonth)}`}>
+              Max Liquidity Hole = −min(0, min_t CumLiq_t)
+            </Formula>
             <Formula live={`Interbank cost ≈ ${m(k.interbankCost)}  (r_ib = ${p(config.interbankRate)}%)`}>
               Funding Cost = Σ_t max(0, −CumLiq_t) × r_ib / 12
             </Formula>
@@ -208,22 +210,27 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             letter="هـ"
             className="lg:col-span-2"
             title="صورت سود و زیان — حاشیهٔ خالص بانک در افق"
-            desc="سه جریان سود/هزینه شناسایی می‌شود: درآمد کارمزد یا سود اقساط وصول‌شده، سود پرداختی روی مانده سپرده‌ها در پایان هر ماه، و هزینهٔ تأمین کسری نقدینگی از بازار بین‌بانکی. نرخ سود سپرده صفر (پیش‌فرض) این لایه را خنثی نگه می‌دارد."
+            desc="چهار جریان سود/هزینه شناسایی می‌شود: درآمد کارمزد یا سود اقساط وصول‌شده، سود پرداختی روی میانگین ماندهٔ ماهانهٔ سپرده‌ها، هزینهٔ تأمین کسری نقدینگی از بازار بین‌بانکی، و هزینهٔ ذخیره مطالبات مشکوک‌الوصول (غیرنقدی). نرخ سود سپرده صفر (پیش‌فرض) لایهٔ سود سپرده و نرخ نکول صفر لایهٔ ذخیره را خنثی نگه می‌دارد."
           >
             <Formula
-              live={`Profit_t = Bal_t × ${p(config.depositProfitRate / 1200, 6)}   →   Σ = ${m(k.totalProfitPaid)}`}
+              live={`Profit_t = AvgBal_t × ${p(config.depositProfitRate / 1200, 6)}   →   Σ = ${m(k.totalProfitPaid)}`}
             >
-              Deposit Profit_t = DepositBalance_t × r_dep / 12
+              Deposit Profit_t = AvgBal_t × r_dep / 12 ; AvgBal_t = (begin_t + end_t) / 2
             </Formula>
             <Formula live={`NII = ${m(k.totalIncomeInHorizon)} − ${m(k.totalProfitPaid)} = ${m(k.netInterestIncome)}`}>
               Net Interest Income = Σ Fee/Profit Collected − Σ Deposit Profit
             </Formula>
             <Formula
-              live={`Margin = ${m(k.netInterestIncome)} − ${m(k.interbankCost)} = ${m(k.netMargin)}   (${
+              live={`Provision = Σ L × ${p(config.defaultRate / 100, 4)} × ${p(config.lgdRate / 100, 4)} = ${m(k.totalProvision)}  ·  written off Σ = ${m(k.totalWriteOff)} (lag ${toFa(config.writeOffLag)}m)`}
+            >
+              Provision_tm = L × δ × LGD (at disbursement) ; WriteOff at tm + T_loan + lag
+            </Formula>
+            <Formula
+              live={`Margin = ${m(k.netInterestIncome)} − ${m(k.interbankCost)} − ${m(k.totalProvision)} = ${m(k.netMargin)}   (${
                 Number.isFinite(k.marginOnNetDeposit) ? `${p(k.marginOnNetDeposit * 100, 2)}% of net resources` : 'net resources = 0'
               })`}
             >
-              Net Margin = NII − Interbank Funding Cost
+              Net Margin = NII − Interbank Funding Cost − Loan-Loss Provision
             </Formula>
           </Step>
 
@@ -236,10 +243,10 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
               live={
                 reg.minLcr === null
                   ? 'no month had a stressed outflow'
-                  : `min LCR = ${fmtRaw(reg.minLcr, 1)}% at month ${toFa(reg.minLcrMonth ?? 0)}  ·  months < 100% = ${toFa(reg.monthsBelow100)}  ·  ω = ${fmtRaw(regulatory.stressRunoff, 1)}%`
+                  : `min LCR = ${fmtRaw(reg.minLcr, 1)}% at month ${toFa(reg.minLcrMonth ?? 0)}  ·  months < 100% = ${toFa(reg.monthsBelow100)}  ·  ω_eff = ${fmtRaw(reg.effStressRunoff, 1)}%, h = ${fmtRaw(regulatory.hqlaHaircut, 1)}%`
               }
             >
-              LCR(t) = max(0, CumLiq_t) / (Outflow_t + ω × DepositBalance_t) × 100
+              LCR(t) = max(0, CumLiq_t) × (1 − h) / (Outflow_t + ω_eff × DepositBalance_t) × 100
             </Formula>
             <Formula
               live={
@@ -286,16 +293,16 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
             desc="نرخ‌های رفتاری حول برآورد شما با توزیع نرمال و حجم منابع با توزیع لگ‌نرمال نمونه‌گیری می‌شوند. دانهٔ تصادفی قابل تنظیم است تا هر توزیع دقیقاً بازتولید شود."
           >
             <Formula live={`current point estimate: hole = ${m(k.maxHole)}, margin = ${m(k.netMargin)}, tipping = ${k.tippingPoint === null ? 'none' : `month ${toFa(k.tippingPoint)}`}`}>
-              ρ′ = clamp(ρ + ε·σ, 0, 100) , ε ~ N(0,1) , σ = intensity × 20pp
+              ρ′ = clamp(ρ + ε·σ, 0, 100) , ε ~ N(0,1) , σ = (intensity/100) × 20pp
             </Formula>
-            <Formula>D′ = D × exp(ε · intensity × 0.25) ; timing shock ~ round(ε · intensity × 1.5)</Formula>
+            <Formula>D′ = D × exp(ε · (intensity/100) × 0.25) ; timing shock ~ round(ε · (intensity/100) × 1.5)</Formula>
             <Formula>P(tipping) = share of runs with min CumLiq &lt; 0 ; VaR₉₅ = P95(max hole)</Formula>
           </Step>
 
           <Step
             letter="ط"
             title="بهینه‌یاب طراحی — جست‌وجوی مختصاتی روی اهرم‌ها"
-            desc="اهرم‌ها (مقیاس α، جابه‌جایی انتظار، جابه‌جایی بازپرداخت، کج‌کردن سهم) همیشه یک‌جا روی پله‌های جاری اعمال می‌شوند. موجه بودن بر مقدار هدف اولویت دارد."
+            desc="جست‌وجوی مختصاتی چندشروعی از طرح جاری و کران‌های هر اهرم آغاز می‌شود تا در بهینهٔ محلی گیر نکند. اهرم‌ها (مقیاس α، جابه‌جایی انتظار، جابه‌جایی بازپرداخت، کج‌کردن سهم) همیشه یک‌جا روی پله‌های جاری اعمال می‌شوند. موجه بودن بر مقدار هدف اولویت دارد."
           >
             <Formula live={`baseline hole = ${m(k.maxHole)}  ·  baseline margin = ${m(k.netMargin)}  ·  leverage = ${Number.isFinite(k.leverage) ? `${fmtRatio(k.leverage)}×` : '∞'}`}>
               maximize Objective(levers) subject to the constraints you set

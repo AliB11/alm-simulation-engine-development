@@ -63,7 +63,14 @@ describe('regulatory metrics — bucketing', () => {
 
 describe('regulatory metrics — LCR proxy', () => {
   it('matches the documented formula month by month', () => {
-    const params: RegulatoryParams = { stressRunoff: 10, stableWeight: 90, loanWeight: 85 };
+    const params: RegulatoryParams = {
+      stressRunoff: 10,
+      stableWeight: 90,
+      loanWeight: 85,
+      wholesaleShare: 0,
+      wholesaleRunoff: 25,
+      hqlaHaircut: 0,
+    };
     const reg = computeRegulatory(sampleTwoResult.rows, params);
     assert.equal(reg.lcr.length, sampleTwoResult.rows.length);
     sampleTwoResult.rows.forEach((row, i) => {
@@ -108,6 +115,9 @@ describe('regulatory metrics — LCR proxy', () => {
       stressRunoff: NaN,
       stableWeight: -50,
       loanWeight: 1e9,
+      wholesaleShare: NaN,
+      wholesaleRunoff: -10,
+      hqlaHaircut: 1e9,
     });
     for (const p of reg.lcr) {
       assert.ok(p.lcr === null || Number.isFinite(p.lcr));
@@ -133,13 +143,41 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
   });
 
   it('scales linearly with the stability and illiquidity weights', () => {
-    const base = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 85 });
-    const doubleStable = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 42.5 });
+    const base = computeRegulatory(sampleTwoResult.rows, {
+      stressRunoff: 5,
+      stableWeight: 90,
+      loanWeight: 85,
+      wholesaleShare: 0,
+      wholesaleRunoff: 25,
+      hqlaHaircut: 0,
+    });
+    const doubleStable = computeRegulatory(sampleTwoResult.rows, {
+      stressRunoff: 5,
+      stableWeight: 90,
+      loanWeight: 42.5,
+      wholesaleShare: 0,
+      wholesaleRunoff: 25,
+      hqlaHaircut: 0,
+    });
     // نصف‌شدن ضریب RSF باید NSFR را دو برابر کند
     assert.ok(near(doubleStable.nsfr!, base.nsfr! * 2, 1e-9));
-    const zeroWeight = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 0, loanWeight: 85 });
+    const zeroWeight = computeRegulatory(sampleTwoResult.rows, {
+      stressRunoff: 5,
+      stableWeight: 0,
+      loanWeight: 85,
+      wholesaleShare: 0,
+      wholesaleRunoff: 25,
+      hqlaHaircut: 0,
+    });
     assert.equal(zeroWeight.nsfr, 0);
-    const zeroRsf = computeRegulatory(sampleTwoResult.rows, { stressRunoff: 5, stableWeight: 90, loanWeight: 0 });
+    const zeroRsf = computeRegulatory(sampleTwoResult.rows, {
+      stressRunoff: 5,
+      stableWeight: 90,
+      loanWeight: 0,
+      wholesaleShare: 0,
+      wholesaleRunoff: 25,
+      hqlaHaircut: 0,
+    });
     assert.equal(zeroRsf.nsfr, null, 'division by zero RSF must stay undefined');
   });
 
@@ -340,5 +378,55 @@ describe('tier attribution — analytic removal of a tier', () => {
     assert.deepEqual(attr.tiers, [], 'deposits without allocation belong to no tier');
     assert.ok(attr.base.maxHole >= 0);
     assert.deepEqual(attr.heat.cells, []);
+  });
+});
+
+describe('regulatory metrics — wholesale split and HQLA haircut', () => {
+  it('reproduces the legacy single-rate LCR at zero wholesale share and haircut', () => {
+    const reg = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
+    assert.equal(reg.effStressRunoff, 5);
+    sampleTwoResult.rows.forEach((row, i) => {
+      const p = reg.lcr[i];
+      assert.equal(p.hqla, Math.max(0, row.cum));
+      assert.ok(near(p.outflow, Math.max(0, row.outflow) + (row.depositBalance * 5) / 100, 1e-12));
+    });
+  });
+
+  it('blends retail and wholesale runoff by the wholesale share', () => {
+    const reg = computeRegulatory(sampleTwoResult.rows, {
+      ...DEFAULT_REGULATORY,
+      wholesaleShare: 50,
+      wholesaleRunoff: 25,
+    });
+    assert.ok(near(reg.effStressRunoff, 15, 1e-12));
+    const row = sampleTwoResult.rows[0];
+    assert.ok(near(reg.lcr[0].outflow, Math.max(0, row.outflow) + (row.depositBalance * 15) / 100, 1e-9));
+    const allWholesale = computeRegulatory(sampleTwoResult.rows, {
+      ...DEFAULT_REGULATORY,
+      wholesaleShare: 100,
+      wholesaleRunoff: 25,
+    });
+    assert.ok(near(allWholesale.effStressRunoff, 25, 1e-12));
+  });
+
+  it('never improves LCR when the haircut or the wholesale runoff is raised', () => {
+    const base = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
+    const cut = computeRegulatory(sampleTwoResult.rows, { ...DEFAULT_REGULATORY, hqlaHaircut: 20 });
+    base.lcr.forEach((p, i) => {
+      const q = cut.lcr[i];
+      assert.ok(near(q.hqla, p.hqla * 0.8, 1e-9));
+      if (p.lcr !== null && q.lcr !== null) assert.ok(q.lcr <= p.lcr + 1e-9);
+    });
+    assert.ok((cut.minLcr ?? Infinity) <= (base.minLcr ?? Infinity) + 1e-9);
+    const stressed = computeRegulatory(sampleTwoResult.rows, {
+      ...DEFAULT_REGULATORY,
+      wholesaleShare: 40,
+      wholesaleRunoff: 60,
+    });
+    stressed.lcr.forEach((p, i) => {
+      const q = base.lcr[i];
+      assert.ok(p.outflow >= q.outflow - 1e-9);
+      if (p.lcr !== null && q.lcr !== null) assert.ok(p.lcr <= q.lcr + 1e-9);
+    });
   });
 });

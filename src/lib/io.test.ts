@@ -174,10 +174,50 @@ describe('scenario slot persistence', () => {
   });
 
   it('keeps regulatory coefficients inside their legal ranges', () => {
-    const state = sanitizeState({ regulatory: { stressRunoff: -3, stableWeight: 400, loanWeight: 'x' } });
+    const state = sanitizeState({
+      regulatory: {
+        stressRunoff: -3,
+        stableWeight: 400,
+        loanWeight: 'x',
+        wholesaleShare: 150,
+        wholesaleRunoff: -5,
+        hqlaHaircut: 'x',
+      },
+    });
     assert.equal(state?.regulatory?.stressRunoff, 0);
     assert.equal(state?.regulatory?.stableWeight, 100);
     assert.equal(state?.regulatory?.loanWeight, 85);
+    assert.equal(state?.regulatory?.wholesaleShare, 100);
+    assert.equal(state?.regulatory?.wholesaleRunoff, 0);
+    assert.equal(state?.regulatory?.hqlaHaircut, 0);
     assert.equal(sanitizeState({ regulatory: 'nope' })?.regulatory, undefined);
+  });
+
+  it('sanitizes the provisioning inputs of imported configs', () => {
+    const state = sanitizeState({ config: { lgdRate: 999, writeOffLag: -3.5 } });
+    assert.equal(state?.config?.lgdRate, 100);
+    assert.equal(state?.config?.writeOffLag, 0);
+    const hostile = sanitizeState({ config: { lgdRate: 'x', writeOffLag: 1e9 } });
+    assert.equal(hostile?.config?.lgdRate, 100);
+    assert.equal(hostile?.config?.writeOffLag, 600);
+  });
+});
+
+describe('policy-rate import ranges', () => {
+  it('preserves policy rates up to 100 while contract rates stay capped at 60', () => {
+    const state = sanitizeState({
+      config: {
+        qardFeeRate: 80,
+        murabahaRate: 90,
+        interbankRate: 80,
+        depositProfitRate: 100,
+        opportunityRate: 75,
+      },
+    });
+    assert.equal(state?.config?.qardFeeRate, 60);
+    assert.equal(state?.config?.murabahaRate, 60);
+    assert.equal(state?.config?.interbankRate, 80);
+    assert.equal(state?.config?.depositProfitRate, 100);
+    assert.equal(state?.config?.opportunityRate, 75);
   });
 });

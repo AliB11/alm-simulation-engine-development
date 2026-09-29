@@ -11,10 +11,15 @@
  *        وام‌گیرنده‌ای هم وجود ندارد؛ پس Withdrawal = D · ω_churn
  *  ج) ماتریس جریان وجوه:
  *     Inflows_t  = D_new,t · (1 − RR) + Σ PMT_k,t
- *     Outflows_t = Σ Commitment_k,t + Σ Withdrawal_k,t
+ *     Outflows_t = Σ Commitment_k,t + Σ Withdrawal_k,t + Profit_t
  *     NCF_t = Inflows_t − Outflows_t ;  CumLiq_t = CumLiq_{t−1} + NCF_t
- *  د) Tipping Point = اولین t با CumLiq_t < 0 ؛ Max Hole = min(CumLiq_t)
+ *     Profit_t = میانگین ماندهٔ ماهانه × r_dep / 12 (ماه‌شمار، نه ماندهٔ پایان دوره)
+ *  د) Tipping Point = اولین t با CumLiq_t < 0 ؛ Max Hole = −min(0, min_t CumLiq_t)
  *     Leverage = (Σ Commitment + Σ Withdrawal) / (D·(1−RR)) — اگر مخرج صفر و صورت مثبت باشد: ∞
+ *  هـ) نکول: ذخیرهٔ زیان موردانتظار (L·δ·LGD) در ماه اعطا شناسایی و اصل
+ *     وصول‌نشده پس از سررسید آخرین قسط + مهلت سوخت، از مانده تسهیلات
+ *     خارج می‌شود. هر دو غیرنقدی‌اند: ذخیره فقط حاشیه و سوخت فقط مانده
+ *     تسهیلات را کاهش می‌دهد؛ هیچ‌کدام وارد NCF/CumLiq نمی‌شوند.
  * ------------------------------------------------------------------ */
 
 import type {
@@ -241,6 +246,8 @@ function emptyRow(t: number): MonthRow {
     withdrawalOut: 0,
     profitPaid: 0,
     fundingCost: 0,
+    provisionCost: 0,
+    writeOff: 0,
     outflow: 0,
     ncf: 0,
     cum: 0,
@@ -259,6 +266,9 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   const take = bounded(behavior.takeUpRate, 0, 100, 0) / 100;
   const app = bounded(behavior.approvalRate, 0, 100, 0) / 100;
   const collectRatio = 1 - bounded(config.defaultRate, 0, 100, 0) / 100;
+  const lossRatio = 1 - collectRatio; // سهم وصول‌نشدهٔ هر قسط (δ)
+  const lgd = bounded(config.lgdRate, 0, 100, 100) / 100;
+  const writeOffLag = Math.round(bounded(config.writeOffLag, 0, MAX_MONTHS, 12));
   const loanCap = bounded(config.loanCap, 0, MAX_MONEY, 0);
   const avgTicket = bounded(behavior.avgTicket, 0, MAX_MONEY, 0);
   const initLiq = bounded(config.initialLiquidity, -MAX_MONEY, MAX_MONEY, 0);
@@ -421,6 +431,18 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
         commitmentsBeyond += L + W;
       }
 
+      /* ۲-ب) ذخیره و سوخت نکول (غیرنقدی — بدون رویداد دفتر کل تا اتحاد
+         دفتر کل با CumLiq حفظ شود):
+         - ذخیرهٔ زیان موردانتظار L·δ·LGD در ماه اعطا (tm) شناسایی می‌شود
+         - همان مبلغ در ماه tm + T_loan + مهلت‌سوخت از مانده تسهیلات خارج می‌شود */
+      const expectedLoss = L * lossRatio * lgd;
+      if (tm <= H && expectedLoss > 0) rows[tm].provisionCost += expectedLoss;
+      const two = tm + T + writeOffLag;
+      if (two <= H && expectedLoss > 0) {
+        bookDelta[two] -= expectedLoss;
+        rows[two].writeOff += expectedLoss;
+      }
+
       // ۳) وصول اقساط از T_dep + 1 تا T_dep + T_loan
       for (let j = 1; j <= T; j++) {
         const tp = tm + j;
@@ -444,19 +466,23 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   });
 
   /* ---- تجمیع ماتریس و محاسبه NCF / CumLiq ---- */
-  // سود پرداختی به سپرده‌گذاران: در پایان هر ماه روی ماندهٔ پایان دورهٔ همان ماه.
-  // نرخ صفر (پیش‌فرض) این جریان را کاملاً خنثی می‌کند.
+  // سود پرداختی به سپرده‌گذاران: ماه‌شمار روی «میانگین ماندهٔ ماهانه»
+  // یعنی (ماندهٔ ابتدای ماه + ماندهٔ پایان ماه) / ۲. ماندهٔ ابتدای ماه صفر
+  // صفر است. نرخ صفر (پیش‌فرض) این جریان را کاملاً خنثی می‌کند.
   const depMonthly = bounded(config.depositProfitRate, 0, MAX_RATE_PCT, 0) / 1200;
   const ibMonthly = bounded(config.interbankRate, 0, MAX_RATE_PCT, 0) / 1200;
   let cum = initLiq;
   let dep = 0;
   let book = 0;
+  let prevDep = 0;
   for (const r of rows) {
     dep += depDelta[r.t];
     book += bookDelta[r.t];
     r.depositBalance = Math.max(0, dep);
     r.loanBook = Math.max(0, book);
-    r.profitPaid = r.depositBalance * depMonthly;
+    const avgDep = (Math.max(0, prevDep) + r.depositBalance) / 2;
+    prevDep = dep;
+    r.profitPaid = avgDep * depMonthly;
     r.inflow = r.depositNet + r.pmtInflow + r.reserveRelease;
     r.outflow = r.loanOut + r.withdrawalOut + r.profitPaid;
     r.ncf = r.inflow - r.outflow;
@@ -487,6 +513,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   let totalPmtInHorizon = 0;
   let totalIncomeInHorizon = 0;
   let totalProfitPaid = 0;
+  let totalProvision = 0;
+  let totalWriteOff = 0;
   let cumMargin = 0;
 
   for (const r of rows) {
@@ -509,8 +537,10 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     totalPmtInHorizon += r.pmtInflow;
     totalIncomeInHorizon += r.incomeIn;
     totalProfitPaid += r.profitPaid;
-    // حاشیهٔ تجمعی بانک: درآمد کارمزد/سود − سود پرداختی سپرده − هزینهٔ تأمین کسری
-    cumMargin += r.incomeIn - r.profitPaid - ibCost;
+    totalProvision += r.provisionCost;
+    totalWriteOff += r.writeOff;
+    // حاشیهٔ تجمعی بانک: درآمد کارمزد/سود − سود پرداختی سپرده − هزینهٔ تأمین کسری − هزینهٔ ذخیره مطالبات
+    cumMargin += r.incomeIn - r.profitPaid - ibCost - r.provisionCost;
     r.cumMargin = cumMargin;
   }
 
@@ -553,6 +583,8 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     peakOutflowMonth,
     totalProfitPaid,
     netInterestIncome: totalIncomeInHorizon - totalProfitPaid,
+    totalProvision,
+    totalWriteOff,
     netMargin: cumMargin,
     /* حاشیه به درصد منابع ورودی خالص. وقتی مخرج صفر است (مثلاً RR = ۱۰۰٪)
        عدد صفر «سر‌به‌سر» به نظر می‌رسد در حالی که طرح می‌تواند ده‌ها میلیارد
@@ -681,6 +713,7 @@ export function sampleComparison(tiers: Tier[], config: GlobalConfig, sample: nu
 /* ------------------------ تحلیل حساسیت دوبعدی ------------------------ */
 
 export type SensVar =
+  | 'defaultRate'
   | 'takeUpRate'
   | 'approvalRate'
   | 'runoffRate'
@@ -701,6 +734,13 @@ export interface SensVarDef {
 }
 
 export const SENS_VARS: SensVarDef[] = [
+  {
+    key: 'defaultRate',
+    label: 'نرخ نکول اقساط',
+    symbol: 'δ',
+    values: () => [0, 2, 5, 10, 15, 25, 40],
+    current: (i) => i.config.defaultRate,
+  },
   {
     key: 'takeUpRate',
     label: 'نرخ تقاضای وام',
@@ -767,6 +807,8 @@ export function applySensitivity(input: SimInput, key: SensVar, value: number): 
     case 'runoffRate':
     case 'churnRate':
       return { ...input, behavior: { ...input.behavior, [key]: bounded(value, 0, 100, 0) } };
+    case 'defaultRate':
+      return { ...input, config: { ...input.config, defaultRate: bounded(value, 0, 100, 0) } };
     case 'reserveRatio':
       return { ...input, config: { ...input.config, reserveRatio: bounded(value, 0, 100, 0) } };
     case 'profitRate':

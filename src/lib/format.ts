@@ -68,6 +68,7 @@ export function fmtCompact(n: number, digits = 2): string {
 /** تجزیه ورودی کاربر (ارقام فارسی/عربی/لاتین، جداکننده، ممیز فارسی) */
 export function parseNumber(s: string): number | null {
   const cleaned = toEn(s)
+    .replace(/−/g, '-')
     .replace(/[\u2066-\u2069\u200e\u200f\s,٬]/g, '')
     .replace(/٫/g, '.')
     .replace(/[^0-9.-]/g, '');

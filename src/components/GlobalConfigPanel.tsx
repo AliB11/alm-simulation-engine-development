@@ -3,6 +3,7 @@ import { ChevronDown, HandCoins, Percent, Settings2, SlidersHorizontal } from 'l
 import type { GlobalConfig } from '../types';
 import { useDisplay } from '../context/display';
 import { fmtCompact, fmtPct } from '../lib/format';
+import { IMPORT_MONEY_MAX } from '../lib/limits';
 import { Button, Card, CardHeader, Field, NumField, Segmented, Toggle } from './ui';
 import { cn } from '../utils/cn';
 
@@ -94,7 +95,7 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
           info="سقف وام قابل پرداخت به هر فرد. ضریب مؤثر هر پله = min(α ، سقف ÷ مانده مبنا). مقدار صفر یعنی بدون سقف."
           hint={config.loanCap > 0 ? `${fmtCompact(config.loanCap * factor)} ${unit}` : 'بدون سقف (۰)'}
         >
-          <NumField money value={config.loanCap} onChange={(v) => onChange({ loanCap: v })} min={0} suffix={unit} />
+          <NumField money value={config.loanCap} onChange={(v) => onChange({ loanCap: v })} min={0} max={IMPORT_MONEY_MAX} suffix={unit} />
         </Field>
 
         <Field
@@ -132,7 +133,7 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
           </Field>
           <Field
             label="نرخ نکول / معوقات اقساط"
-            info="درصدی از اقساط سررسیدشده که وصول نمی‌شود و از ورودی‌های نقد کسر می‌گردد."
+            info="درصدی از اقساط سررسیدشده که وصول نمی‌شود و از ورودی‌های نقد کسر می‌گردد. برای اصل وصول‌نشده، ذخیرهٔ زیان موردانتظار شناسایی و پس از مهلت سوخت از مانده تسهیلات خارج می‌شود."
             hint="PMT وصولی = PMT × (۱ − نرخ نکول)"
           >
             <NumField
@@ -142,6 +143,34 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
               max={100}
               decimals={2}
               suffix="٪"
+            />
+          </Field>
+          <Field
+            label="زیان در صورت نکول (LGD)"
+            info="سهمی از اصل وصول‌نشده که سوخت قطعی فرض می‌شود و به همان میزان در ماه اعطای وام، هزینهٔ ذخیره مطالبات مشکوک‌الوصول (غیرنقدی) شناسایی می‌گردد. مابقی قابل‌بازیافت فرض و در مانده تسهیلات می‌ماند."
+            hint="ذخیره = وام × نکول × LGD"
+          >
+            <NumField
+              value={config.lgdRate}
+              onChange={(v) => onChange({ lgdRate: v })}
+              min={0}
+              max={100}
+              decimals={1}
+              suffix="٪"
+            />
+          </Field>
+          <Field
+            label="مهلت سوخت مطالبات"
+            info="تعداد ماه پس از سررسید آخرین قسط قراردادی که اصل وصول‌نشده (به میزان LGD) از مانده تسهیلات خارج می‌شود. صفر یعنی سوخت دقیقاً در ماه اتمام بازپرداخت."
+            hint="سوخت در T_dep + T_loan + مهلت"
+          >
+            <NumField
+              value={config.writeOffLag}
+              onChange={(v) => onChange({ writeOffLag: Math.round(v) })}
+              min={0}
+              max={120}
+              step={1}
+              suffix="ماه"
             />
           </Field>
           <Field
@@ -160,7 +189,7 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
           </Field>
           <Field
             label="نرخ سود پرداختی سپرده"
-            info="سود سالانه‌ای که بانک روی مانده سپرده‌ها می‌پردازد (سپردهٔ سرمایه‌گذاری / کوتاه‌مدت ماه‌شمار). در پایان هر ماه روی ماندهٔ پایان دوره به‌عنوان یک خروجی نقد واقعی ثبت می‌شود و هم بر حاشیهٔ سود و هم بر نقطهٔ واژگونی اثر می‌گذارد."
+            info="سود سالانه‌ای که بانک روی مانده سپرده‌ها می‌پردازد (سپردهٔ سرمایه‌گذاری / کوتاه‌مدت ماه‌شمار). هر ماه روی میانگین ماندهٔ ماهانه ((ابتدا + انتهای ماه) ÷ ۲) به‌عنوان یک خروجی نقد واقعی ثبت می‌شود و هم بر حاشیهٔ سود و هم بر نقطهٔ واژگونی اثر می‌گذارد."
             hint="r_dep — صفر یعنی خنثی (سپردهٔ قرض‌الحسنهٔ بدون سود)"
           >
             <NumField

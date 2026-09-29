@@ -10,7 +10,15 @@ import { cn } from '../utils/cn';
 
 const SAMPLES = [50_000_000, 100_000_000, 200_000_000, 500_000_000];
 
-export function TierComparison({ tiers, config }: { tiers: Tier[]; config: GlobalConfig }) {
+export function TierComparison({
+  tiers,
+  config,
+  onOpportunityRate,
+}: {
+  tiers: Tier[];
+  config: GlobalConfig;
+  onOpportunityRate?: (v: number) => void;
+}) {
   const { unit, factor } = useDisplay();
   const [sample, setSample] = useState(100_000_000);
   const rows = useMemo(() => sampleComparison(tiers, config, sample), [tiers, config, sample]);
@@ -34,6 +42,23 @@ export function TierComparison({ tiers, config }: { tiers: Tier[]; config: Globa
         subtitle="مبلغ وام، قسط ماهانه، کل کارمزد/سود، نرخ بازگشت سرمایه و نرخ مؤثر سالانه به ازای یک سپرده‌گذار نمونه"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {onOpportunityRate && (
+              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 dark:text-slate-400">
+                هزینه فرصت:
+                <NumField
+                  size="sm"
+                  value={config.opportunityRate}
+                  onChange={onOpportunityRate}
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  decimals={1}
+                  suffix="٪"
+                  className="w-[104px]"
+                  ariaLabel="نرخ هزینه فرصت سپرده"
+                />
+              </span>
+            )}
             <span className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">سپرده نمونه:</span>
             <NumField money size="sm" value={sample} min={0} onChange={setSample} suffix={unit} className="w-[190px]" />
             <div className="flex gap-1">

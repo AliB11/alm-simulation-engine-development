@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Behavior, DepositSchedule, GlobalConfig, SimInput, Tier } from '../types';
-import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, simulate, uniformVintageCount } from './engine';
+import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, SENS_VARS, simulate, uniformVintageCount } from './engine';
 import { sanitizeState } from './io';
 import { presetInput } from './testUtils';
 
@@ -15,6 +15,8 @@ const config: GlobalConfig = {
   initialLiquidity: 0,
   releaseReserve: false,
   defaultRate: 0,
+  lgdRate: 100,
+  writeOffLag: 12,
   interbankRate: 23,
   opportunityRate: 23,
   depositProfitRate: 0,
@@ -321,31 +323,56 @@ describe('deposit profit and simulated P&L', () => {
     assert.ok(result.rows.every((r) => near(r.outflow, r.loanOut + r.withdrawalOut)));
   });
 
-  it('accrues profit on the closing deposit balance of each month', () => {
+  it('accrues profit on the average monthly balance of each month', () => {
     const rate = 20;
     const result = simulate({ ...pAndL, config: { ...pAndL.config, depositProfitRate: rate } });
     const monthly = rate / 1200;
-    for (const r of result.rows) assert.ok(Math.abs(r.profitPaid - r.depositBalance * monthly) < 1e-6);
+    let prev = 0;
+    for (const r of result.rows) {
+      const avg = (prev + r.depositBalance) / 2;
+      assert.ok(Math.abs(r.profitPaid - avg * monthly) < 1e-6, `profit mismatch at month ${r.t}`);
+      prev = r.depositBalance;
+    }
 
-    // closed form: months 0..tDep-1 carry the full deposit, tDep..H the post-runoff balance
+    // closed form with no runoff: month 0 averages D/2, months 1..H the full D
     const D = behavior.totalDeposit;
-    const tDep = 3;
     const H = 12;
-    const wd = result.kpis.totalWithdrawal;
-    const expected = monthly * (tDep * D + (H + 1 - tDep) * (D - wd));
-    expectClose(result.kpis.totalProfitPaid, expected);
+    expectClose(result.kpis.totalProfitPaid, monthly * (D / 2 + H * D));
+  });
+
+  it('averages deposits and withdrawals that land inside the month', () => {
+    const rate = 20;
+    const full = simulate({
+      ...pAndL,
+      behavior: { ...pAndL.behavior, runoffRate: 100, churnRate: 100 },
+      config: { ...pAndL.config, depositProfitRate: rate },
+    });
+    // D = ۱۰۰۰ در ماه صفر می‌نشیند و در ماه ۳ به‌طور کامل خارج می‌شود:
+    // میانگین‌ها: ۵۰۰، ۱۰۰۰، ۱۰۰۰، ۵۰۰ و سپس صفر
+    const monthly = rate / 1200;
+    expectClose(full.rows[0].profitPaid, 500 * monthly);
+    expectClose(full.rows[1].profitPaid, 1000 * monthly);
+    expectClose(full.rows[3].profitPaid, 500 * monthly);
+    expectClose(full.rows[4].profitPaid, 0);
+    expectClose(full.kpis.totalProfitPaid, monthly * 3000);
   });
 
   it('keeps the P&L identity and cumulative margin consistent month by month', () => {
-    const result = simulate({ ...pAndL, config: { ...pAndL.config, depositProfitRate: 18, interbankRate: 23 } });
+    const result = simulate({
+      ...pAndL,
+      config: { ...pAndL.config, depositProfitRate: 18, interbankRate: 23, defaultRate: 10 },
+    });
     let margin = 0;
     for (const r of result.rows) {
-      margin += r.incomeIn - r.profitPaid - r.fundingCost;
+      margin += r.incomeIn - r.profitPaid - r.fundingCost - r.provisionCost;
       assert.ok(Math.abs(r.cumMargin - margin) < 1e-6, `cumMargin drifted at month ${r.t}`);
     }
     expectClose(result.kpis.netInterestIncome, result.kpis.totalIncomeInHorizon - result.kpis.totalProfitPaid);
     expectClose(result.kpis.netMargin, margin);
     expectClose(result.kpis.interbankCost, result.rows.reduce((s, r) => s + r.fundingCost, 0));
+    expectClose(result.kpis.totalProvision, result.rows.reduce((s, r) => s + r.provisionCost, 0));
+    expectClose(result.kpis.totalWriteOff, result.rows.reduce((s, r) => s + r.writeOff, 0));
+    assert.ok(result.kpis.totalProvision > 0, 'a 10% default rate must produce a provision');
   });
 
   it('feeds deposit profit into liquidity risk, not just the P&L', () => {
@@ -380,5 +407,82 @@ describe('deposit profit and simulated P&L', () => {
     assert.equal(result.kpis.totalProfitPaid, 0);
     assert.ok(result.rows.every((r) => Number.isFinite(r.cum) && Number.isFinite(r.cumMargin)));
     assert.ok(Number.isFinite(result.kpis.netMargin) && Number.isFinite(result.kpis.marginOnNetDeposit));
+  });
+});
+
+describe('loan-loss provisioning and write-off', () => {
+  const npl: SimInput = {
+    config: { ...config, reserveRatio: 0, horizon: 12, interbankRate: 0, defaultRate: 50, lgdRate: 100, writeOffLag: 2 },
+    behavior,
+    tiers: [{ ...tier, tDep: 3, tLoan: 6 }],
+    schedule: lump,
+  };
+  // D = ۱۰۰۰، α = ۱۰۰٪، تقاضا و قبولی ۱۰۰٪ ⇒ L = ۱۰۰۰ در ماه ۳؛ زیان موردانتظار = ۱۰۰۰ × ۵۰٪ × ۱۰۰٪ = ۵۰۰
+
+  it('recognizes the expected-loss provision at disbursement', () => {
+    const result = simulate(npl);
+    expectClose(result.rows[3].provisionCost, 500);
+    assert.ok(result.rows.every((r, i) => (i === 3 ? true : r.provisionCost === 0)));
+    expectClose(result.kpis.totalProvision, 500);
+  });
+
+  it('writes uncollected principal off the loan book after the last installment plus lag', () => {
+    const result = simulate(npl);
+    // اقساط ماه‌های ۴ تا ۹؛ سوخت در ۳ + ۶ + ۲ = ماه ۱۱
+    expectClose(result.rows[11].writeOff, 500);
+    expectClose(result.kpis.totalWriteOff, 500);
+    expectClose(result.rows[9].loanBook, 500);
+    assert.ok(result.rows[9].loanBook > 0, 'uncollected principal stays on the book until write-off');
+    expectClose(result.rows[11].loanBook, 0);
+    expectClose(result.rows[12].loanBook, 0);
+  });
+
+  it('keeps provisions and write-offs out of liquidity while charging them to the margin', () => {
+    const full = simulate(npl);
+    const noLgd = simulate({ ...npl, config: { ...npl.config, lgdRate: 0 } });
+    assert.equal(noLgd.kpis.totalProvision, 0);
+    assert.equal(noLgd.kpis.totalWriteOff, 0);
+    expectClose(noLgd.rows[12].loanBook, 500);
+    assert.equal(full.kpis.endCum, noLgd.kpis.endCum, 'provisions are non-cash and must not move liquidity');
+    assert.equal(full.kpis.maxHole, noLgd.kpis.maxHole);
+    expectClose(noLgd.kpis.netMargin - full.kpis.netMargin, 500);
+    expectClose(full.kpis.netMargin, full.kpis.netInterestIncome - full.kpis.interbankCost - full.kpis.totalProvision);
+  });
+
+  it('leaves the recoverable share of uncollected principal on the book under partial LGD', () => {
+    const result = simulate({ ...npl, config: { ...npl.config, lgdRate: 40 } });
+    expectClose(result.kpis.totalProvision, 200);
+    expectClose(result.kpis.totalWriteOff, 200);
+    expectClose(result.rows[12].loanBook, 300);
+  });
+
+  it('stays neutral when there is no default, regardless of LGD and lag', () => {
+    const result = simulate({ ...npl, config: { ...npl.config, defaultRate: 0 } });
+    assert.equal(result.kpis.totalProvision, 0);
+    assert.equal(result.kpis.totalWriteOff, 0);
+    assert.ok(result.rows.every((r) => r.provisionCost === 0 && r.writeOff === 0));
+  });
+});
+
+describe('sensitivity — default rate driver', () => {
+  it('exposes the default rate as a bounded sensitivity variable', () => {
+    const def = SENS_VARS.find((v) => v.key === 'defaultRate');
+    assert.ok(def, 'defaultRate must be a sensitivity variable');
+    assert.deepEqual(def!.values(presetInput('sample-2')), [0, 2, 5, 10, 15, 25, 40]);
+    const shocked = applySensitivity(presetInput('sample-2'), 'defaultRate', 25);
+    assert.equal(shocked.config.defaultRate, 25);
+    assert.equal(shocked.behavior.takeUpRate, presetInput('sample-2').behavior.takeUpRate);
+    const clamped = applySensitivity(presetInput('sample-2'), 'defaultRate', 400);
+    assert.equal(clamped.config.defaultRate, 100);
+  });
+
+  it('moves the hole and provision when the default grid is swept', () => {
+    const input = presetInput('sample-2');
+    const grid = runSensitivity(input, 'defaultRate', 'takeUpRate');
+    assert.ok(grid.xs.includes(0));
+    const lo = grid.cells[0][0];
+    const hi = grid.cells[0][grid.cells[0].length - 1];
+    assert.ok(hi.totalProvision >= lo.totalProvision);
+    assert.ok(hi.totalPmtInHorizon <= lo.totalPmtInHorizon + 1e-6);
   });
 });

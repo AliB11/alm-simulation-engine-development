@@ -86,6 +86,8 @@ export const KPI_ROWS: KpiRowDef[] = [
   { key: 'totalCommitment', label: 'کل تعهد اعطای وام', kind: 'money' },
   { key: 'netDeposit', label: 'منابع ورودی خالص', kind: 'money' },
   { key: 'interbankCost', label: 'هزینهٔ تأمین کسری', kind: 'money', lowerIsBetter: true },
+  { key: 'totalProvision', label: 'هزینهٔ ذخیره مطالبات', kind: 'money', lowerIsBetter: true },
+  { key: 'totalWriteOff', label: 'سوخت مطالبات از مانده تسهیلات', kind: 'money', lowerIsBetter: true },
   { key: 'leverage', label: 'اهرم خروج', kind: 'ratio', lowerIsBetter: true },
   { key: 'tippingPoint', label: 'نقطهٔ واژگونی', kind: 'month', lowerIsBetter: true },
   { key: 'recoveryMonth', label: 'ماه بازیابی', kind: 'month', lowerIsBetter: true },
@@ -108,13 +110,18 @@ export function configDiffs(a: ScenarioSlot, b: ScenarioSlot): string[] {
   };
   const contractName = (t: string) => (t === 'murabaha' ? 'مرابحه' : 'قرض‌الحسنه');
   num('افق', a.config.horizon, b.config.horizon, 0);
+  num('نقدینگی اولیه', a.config.initialLiquidity, b.config.initialLiquidity, 0);
   num('سپرده قانونی', a.config.reserveRatio, b.config.reserveRatio);
   num('نرخ قرارداد', a.config.contractType === 'qard' ? a.config.qardFeeRate : a.config.murabahaRate, b.config.contractType === 'qard' ? b.config.qardFeeRate : b.config.murabahaRate);
   num('سقف وام', a.config.loanCap, b.config.loanCap, 0);
   num('نکول', a.config.defaultRate, b.config.defaultRate);
+  num('LGD', a.config.lgdRate, b.config.lgdRate);
+  num('مهلت سوخت', a.config.writeOffLag, b.config.writeOffLag, 0);
   num('بین‌بانکی', a.config.interbankRate, b.config.interbankRate);
+  num('هزینه فرصت', a.config.opportunityRate, b.config.opportunityRate);
   num('سود سپرده', a.config.depositProfitRate, b.config.depositProfitRate);
   num('کل منابع', a.behavior.totalDeposit, b.behavior.totalDeposit, 0);
+  num('میانگین سپرده', a.behavior.avgTicket, b.behavior.avgTicket, 0);
   num('نرخ تقاضا', a.behavior.takeUpRate, b.behavior.takeUpRate);
   num('نرخ قبولی', a.behavior.approvalRate, b.behavior.approvalRate);
   num('خروج سپرده', a.behavior.runoffRate, b.behavior.runoffRate);
@@ -122,6 +129,20 @@ export function configDiffs(a: ScenarioSlot, b: ScenarioSlot): string[] {
   if (a.config.contractType !== b.config.contractType) {
     out.push(`نوع قرارداد: ${contractName(a.config.contractType)} به ${contractName(b.config.contractType)}`);
   }
+  if (!!a.config.releaseReserve !== !!b.config.releaseReserve) {
+    out.push(`آزادسازی سپرده قانونی: ${a.config.releaseReserve ? 'فعال' : 'غیرفعال'} به ${b.config.releaseReserve ? 'فعال' : 'غیرفعال'}`);
+  }
+  const scheduleName = (m: string) => (m === 'uniform' ? 'یکنواخت' : m === 'custom' ? 'سفارشی' : 'یکجا');
+  if (a.schedule.mode !== b.schedule.mode) {
+    out.push(`زمان‌بندی ورود: ${scheduleName(a.schedule.mode)} به ${scheduleName(b.schedule.mode)}`);
+  }
+  num('ماه‌های توزیع یکنواخت', a.schedule.uniformMonths, b.schedule.uniformMonths, 0);
+  const customSig = (s: typeof a.schedule) =>
+    (Array.isArray(s.custom) ? s.custom : [])
+      .map((v) => `${Math.round(v.month)}:${Math.round(v.share * 1000) / 1000}`)
+      .sort()
+      .join('|');
+  if (customSig(a.schedule) !== customSig(b.schedule)) out.push('ترکیب ویژه‌های سفارشی');
   if (a.tiers.length !== b.tiers.length) out.push(`تعداد پله‌ها: ${toFa(a.tiers.length)} به ${toFa(b.tiers.length)}`);
   const maxTiers = Math.max(a.tiers.length, b.tiers.length);
   for (let i = 0; i < maxTiers; i++) {
@@ -132,6 +153,11 @@ export function configDiffs(a: ScenarioSlot, b: ScenarioSlot): string[] {
     num(`پله ${toFa(i + 1)} · بازپرداخت`, x.tLoan, y.tLoan, 0);
     num(`پله ${toFa(i + 1)} · ضریب`, x.alpha, y.alpha, 2);
     num(`پله ${toFa(i + 1)} · سهم`, x.allocation, y.allocation, 1);
+    num(`پله ${toFa(i + 1)} · حداقل مانده`, x.minBalance, y.minBalance, 0);
+    if ((x.rateOverride ?? null) !== (y.rateOverride ?? null)) {
+      const fmtRate = (v: number | null) => (v === null ? 'سراسری' : fmt(v, 1));
+      out.push(`پله ${toFa(i + 1)} · نرخ اختصاصی: ${fmtRate(x.rateOverride ?? null)} به ${fmtRate(y.rateOverride ?? null)}`);
+    }
   }
   return out;
 }

@@ -2,8 +2,9 @@
  *  REGULATORY & MATURITY METRICS — سنجه‌های مقرراتی‌مانند
  *
  *  پیاده‌سازی آموزشی و قابل تنظیم از سه سنجه:
- *   • LCR  — نسبت پوشش نقدینگی ماهانه: دارایی نقد (مازاد تجمعی مثبت)
- *            تقسیم بر خروج استرس‌شدهٔ همان ماه
+ *   • LCR  — نسبت پوشش نقدینگی ماهانه: دارایی نقد تنزیل‌شده (مازاد تجمعی
+ *            مثبت پس از haircut) تقسیم بر خروج همان ماه + خروج استرس‌شدهٔ
+ *            سپرده با نرخ مؤثر ترکیبی خرد/کلان
  *   • NSFR — نسبت خالص تأمین مالی پایدار در ماه m: منابع پایدار (سپرده ×
  *            ضریب پایداری) تقسیم بر دارایی‌های نیازمند تأمین (وام × ضریب)
  *   • WAL  — میانگین وزنی عمر دارایی‌ها و تعهدات و «شکاف سررسید». سمت
@@ -19,25 +20,36 @@ import { bounded, EPS, finite } from './engine';
 import { bucketCountFor, bucketSizeForRows } from './buckets';
 
 export interface RegulatoryParams {
-  /** درصد اضافی از ماندهٔ سپرده که در سناریوی استرس خارج فرض می‌شود (LCR) */
+  /** درصد اضافی از ماندهٔ سپردهٔ خرد که در سناریوی استرس خارج فرض می‌شود (LCR) */
   stressRunoff: number;
   /** ضریب پایداری منابع سپرده‌ای (ASF) — درصد */
   stableWeight: number;
   /** ضریب نیاز به تأمین پایدار برای دارایی وام (RSF) — درصد */
   loanWeight: number;
+  /** سهم سپرده‌های کلان/شرکتی از ماندهٔ سپرده (درصد) — صفر یعنی همهٔ منابع خرد */
+  wholesaleShare: number;
+  /** درصد خروج استرس سپرده‌های کلان/شرکتی در سناریوی استرس (LCR) */
+  wholesaleRunoff: number;
+  /** تنزیل (haircut) دارایی نقد در محاسبهٔ LCR (درصد) */
+  hqlaHaircut: number;
 }
 
 export const DEFAULT_REGULATORY: RegulatoryParams = {
   stressRunoff: 5,
   stableWeight: 90,
   loanWeight: 85,
+  wholesaleShare: 0,
+  wholesaleRunoff: 25,
+  hqlaHaircut: 0,
 };
 
 export interface LcrPoint {
   month: number;
   /** نسبت به درصد؛ null یعنی ماه بدون خروج (پوشش نامحدود) */
   lcr: number | null;
+  /** دارایی نقد پس از تنزیل */
   hqla: number;
+  /** خروجی ماه + خروج استرس‌شده با نرخ مؤثر خرد/کلان */
   outflow: number;
 }
 
@@ -72,6 +84,8 @@ export interface Regulatory {
   minLcr: number | null;
   minLcrMonth: number | null;
   monthsBelow100: number;
+  /** نرخ مؤثر خروج استرس سپرده (ترکیب خرد/کلان) — درصد */
+  effStressRunoff: number;
   nsfr: number | null;
   nsfrMonth: number;
   asf: number;
@@ -98,11 +112,17 @@ export function computeRegulatory(rows: MonthRow[], params: RegulatoryParams): R
   const stressRunoff = bounded(params.stressRunoff, 0, 100, DEFAULT_REGULATORY.stressRunoff);
   const stableWeight = bounded(params.stableWeight, 0, 100, DEFAULT_REGULATORY.stableWeight);
   const loanWeight = bounded(params.loanWeight, 0, 100, DEFAULT_REGULATORY.loanWeight);
+  const wholesaleShare = bounded(params.wholesaleShare, 0, 100, DEFAULT_REGULATORY.wholesaleShare);
+  const wholesaleRunoff = bounded(params.wholesaleRunoff, 0, 100, DEFAULT_REGULATORY.wholesaleRunoff);
+  const hqlaHaircut = bounded(params.hqlaHaircut, 0, 100, DEFAULT_REGULATORY.hqlaHaircut);
+
+  /* نرخ مؤثر خروج استرس: میانگین وزنی نرخ خرد و کلان با سهم سپردهٔ کلان */
+  const effStressRunoff = ((100 - wholesaleShare) * stressRunoff + wholesaleShare * wholesaleRunoff) / 100;
 
   /* ------------------------------- LCR ------------------------------- */
   const lcr: LcrPoint[] = rows.map((row) => {
-    const hqla = Math.max(0, finite(row.cum, 0));
-    const stress = (finite(row.depositBalance, 0) * stressRunoff) / 100;
+    const hqla = (Math.max(0, finite(row.cum, 0)) * (100 - hqlaHaircut)) / 100;
+    const stress = (finite(row.depositBalance, 0) * effStressRunoff) / 100;
     const outflow = Math.max(0, finite(row.outflow, 0)) + stress;
     return {
       month: row.t,
@@ -209,6 +229,7 @@ export function computeRegulatory(rows: MonthRow[], params: RegulatoryParams): R
     minLcr,
     minLcrMonth,
     monthsBelow100,
+    effStressRunoff,
     nsfr,
     nsfrMonth,
     asf,

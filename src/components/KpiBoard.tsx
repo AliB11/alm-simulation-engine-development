@@ -238,7 +238,7 @@ export function KpiBoard({ result, config }: { result: SimResult; config: Global
               </span>
             </>
           }
-          formula="Max Hole = min(CumLiq_t)"
+          formula="Max Hole = \u2212min(0, min CumLiq_t)"
         />
       </div>
 
@@ -281,7 +281,7 @@ export function KpiBoard({ result, config }: { result: SimResult; config: Global
             )}
             {k.pmtBeyondHorizon > 0.5 && (
               <>
-                {k.commitmentsBeyondHorizon > 0.5 ? ' و' : ''} اقساط وصول‌نشده <b><Money compact value={k.pmtBeyondHorizon} /></b> {unit}
+                {k.commitmentsBeyondHorizon > 0.5 ? ' و' : ''} وصول اقساط پس از افق <b><Money compact value={k.pmtBeyondHorizon} /></b> {unit} (پس از کسر نکول)
               </>
             )}
             . برای تصویر کامل، افق شبیه‌سازی را افزایش دهید.
@@ -398,6 +398,10 @@ export function TierCommitmentTable({ result }: { result: SimResult }) {
             </tr>
           </tfoot>
         </table>
+      </div>
+      <div className="border-t border-slate-100 px-5 py-3 text-[11px] leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        «قسط ماهانه کل» جمع اقساط <b>قراردادی</b> (پیش از کسر نکول) همهٔ ویژه‌های هر پله است؛ در زمان‌بندی مرحله‌ای
+        این رقم در یک ماه تحقق نمی‌یابد. ستون‌های تعهد و خروج، سررسیدهای پس از افق را هم شامل می‌شوند.
       </div>
     </Card>
   );

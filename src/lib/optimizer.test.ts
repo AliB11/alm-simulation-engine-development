@@ -9,6 +9,7 @@ import {
   designToInput,
   leverDistance,
   leverKey,
+  MULTI_STARTS,
   NEUTRAL_LEVERS,
   objectiveValue,
   optimizeDesign,
@@ -191,7 +192,30 @@ describe('design optimizer — objective, constraints and search', () => {
     assert.equal(keys.size, res.candidates.length, 'topN must not contain duplicates');
     assert.ok(res.candidates.length <= 4);
     assert.equal(res.best.key, leverKey(res.best.levers));
-    assert.ok(res.evaluations <= 1 + 3 * (9 + 9 + 8 + 3), 'coordinate descent is bounded by the grid size');
+    assert.equal(res.starts, MULTI_STARTS.length);
+    // هر نقطهٔ شروع حداکثر ۱ + گذر × ابعاد شبکه ارزیابی تازه دارد؛ اشتراک‌گذاری استخر فقط کمش می‌کند
+    assert.ok(
+      res.evaluations <= MULTI_STARTS.length * (1 + 3 * (9 + 9 + 8 + 3)),
+      'multi-start coordinate descent is bounded by starts × grid size',
+    );
+  });
+
+  it('searches from every start and never finishes worse than the single-start search', () => {
+    const multi = optimizeDesign(input, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS });
+    const single = optimizeDesign(input, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, multiStart: false });
+    assert.equal(single.starts, 1);
+    assert.equal(multi.starts, MULTI_STARTS.length);
+    assert.ok(multi.evaluations >= single.evaluations);
+    assert.ok(
+      single.evaluations <= 1 + 2 * (9 + 9 + 8 + 3),
+      'the legacy single-start path keeps its original evaluation bound',
+    );
+    // نقطهٔ شروع اول همان طرح جاری است، پس چندشروعی حداقل به خوبی تک‌شروعی است
+    const multiWins =
+      multi.best.feasible !== single.best.feasible
+        ? multi.best.feasible
+        : multi.best.objective >= single.best.objective - 1e-9;
+    assert.ok(multiWins, 'multi-start must dominate single-start');
   });
 
   it('describes levers in Persian with the right signs', () => {
@@ -200,5 +224,17 @@ describe('design optimizer — objective, constraints and search', () => {
     assert.ok(parts.some((p) => p.includes('دورهٔ انتظار') && p.includes('−') && p.includes('۲')));
     assert.ok(parts.some((p) => p.includes('بازپرداخت') && p.includes('+') && p.includes('۱۲')));
     assert.ok(parts.some((p) => p.includes('انتظار بلند')));
+  });
+});
+
+describe('optimizer — violation tolerances', () => {
+  it('tolerates floating-point dust in the non-negative-margin constraint', () => {
+    const kpis = simulate(input, false).kpis;
+    const dusty = { ...kpis, netMargin: -1e-9 };
+    assert.deepEqual(violations(dusty, { maxHolePct: 0, requireSolvent: false, maxLeverage: 0, requirePositiveMargin: true }), []);
+    const losing = { ...kpis, netMargin: -1 };
+    assert.ok(
+      violations(losing, { maxHolePct: 0, requireSolvent: false, maxLeverage: 0, requirePositiveMargin: true }).includes('حاشیهٔ خالص منفی'),
+    );
   });
 });
