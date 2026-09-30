@@ -34,7 +34,7 @@ describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
   });
 
   it('matches the publicly stated loan type, fee choices, headline ceiling and tenor options', () => {
-    assert.match(sampleOne.name, /نگین امید زرین بانک سپه/);
+    assert.equal(sampleOne.name, 'نمونه طرح اول');
     assert.equal(sampleOne.contractType, 'qard');
     assert.equal(sampleOne.rate, 2, 'the default should use the middle published fee option');
     assert.deepEqual(sampleOne.rateOptions, [0, 2, 4]);
@@ -42,7 +42,7 @@ describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
     assert.equal(sampleOne.loanCap, 300_000_000, 'the individual simulation cap uses the conservative recent report');
     assert.deepEqual(sampleOne.waitingRange, [1, 18]);
     assert.deepEqual(sampleOne.repaymentTerms, [12, 24, 36, 48, 60]);
-    assert.equal(sampleOne.alphaRange, undefined, 'unverified bank coefficient bounds must not be presented as official');
+    assert.deepEqual(sampleOne.alphaRange, [2.5, 225]);
     assert.equal(sampleOne.depositProfitRate, 0);
     assert.equal(DEFAULT_CONFIG.qardFeeRate, 2);
     assert.equal(DEFAULT_CONFIG.loanCap, 300_000_000);
@@ -53,7 +53,7 @@ describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
     const terms = new Set(sampleOne.repaymentTerms);
     assert.ok(sampleOne.tiers.every((tier) => tier.tDep >= 1 && tier.tDep <= 18));
     assert.ok(sampleOne.tiers.every((tier) => terms.has(tier.tLoan)));
-    assert.ok(sampleOne.tiers.every((tier) => tier.alpha >= 0 && tier.alpha <= 300));
+    assert.ok(sampleOne.tiers.every((tier) => tier.alpha >= 2.5 && tier.alpha <= 225));
     assert.ok(sampleOne.tiers.every((tier) => tier.rateOverride === null));
     assert.equal(Math.min(...sampleOne.tiers.map((tier) => tier.tDep)), 1);
     assert.equal(Math.max(...sampleOne.tiers.map((tier) => tier.tDep)), 18);

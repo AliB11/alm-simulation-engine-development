@@ -147,7 +147,7 @@ export function OptimizerSummary({
             طرح جاری {result.baseline.violations.length
               ? `هم این قیدها را نقض می‌کند (${result.baseline.violations.join(' · ')})`
               : 'موجه است'}{' '}
-            — برای رسیدن به طرح موجه، قیدها را شل کنید یا بگذارید اهرم نرخ عقد آزادتر جست‌وجو شود.
+            — برای رسیدن به طرح موجه، قیدها را شل کنید یا سقف‌های نقدینگی و اهرم را بازبینی کنید.
           </div>
         </div>
       )}
@@ -157,7 +157,7 @@ export function OptimizerSummary({
 
 /**
  * جدول نامزدهای برتر. هر ردیف یک «طراحی متمایز» است — ترکیب‌های اهرمی که پس
- * از مهار در کران‌های قانونی به پله‌های یکسان می‌رسند، در بهینه‌یاب ادغام
+ * از مهار در کران‌های قانونی و گزینه‌های معتبر به پله‌های یکسان می‌رسند، در بهینه‌یاب ادغام
  * شده‌اند و اینجا تکراری ظاهر نمی‌شوند.
  */
 export function OptimizerResultTable({
@@ -262,10 +262,10 @@ interface RunSnapshot {
 /**
  * بهینه‌یاب طراحی پله‌ها («طراح معکوس»):
  * کاربر هدف و قیدها را مشخص می‌کند و موتور با جست‌وجوی مختصاتی چندشروعی روی
- * پنج اهرم طراحی، بهترین ترکیب را یافته و طرح‌های برتر را رتبه‌بندی می‌کند.
+ * سه اهرم مجاز طراحی، بهترین ترکیب را یافته و طرح‌های برتر را رتبه‌بندی می‌کند.
  */
 export function OptimizerPanel({ input, onApply }: Props) {
-  const [objective, setObjective] = useState<Objective>('margin');
+  const [objective, setObjective] = useState<Objective>('safety');
   const [constraints, setConstraints] = useState<Constraints>(DEFAULT_CONSTRAINTS);
   const [run, setRun] = useState<RunSnapshot | null>(null);
   const [running, setRunning] = useState(false);
@@ -290,8 +290,7 @@ export function OptimizerPanel({ input, onApply }: Props) {
     setRunning(false);
   }, [input, objective, constraints]);
 
-  /* تنها مسیر اعمال اهرم‌ها: نرخ سراسری پیکربندی جاری هم به اهرم نرخ داده
-     می‌شود، وگرنه پله‌های بدون نرخ اختصاصی بی‌صدا از جست‌وجو جا می‌مانند. */
+  /* تنها مسیر اعمال سه اهرم مجاز؛ نرخ‌ها و سهم‌های تخصیص بدون تغییر می‌مانند. */
   const applyLeversOf = useCallback(
     (levers: DesignLevers, label: string) => onApply(designTiers(input, levers), label),
     [input, onApply],
@@ -392,9 +391,9 @@ export function OptimizerPanel({ input, onApply }: Props) {
               <Sparkles className="h-7 w-7 text-indigo-400" />
               <div className="text-[13px] font-bold text-slate-600 dark:text-slate-300">هنوز بهینه‌سازی اجرا نشده است</div>
               <p className="max-w-sm text-[11.5px] leading-6 text-slate-500 dark:text-slate-400">
-                اهرم‌های جست‌وجو: مقیاس ضرایب برابری (α)، جابه‌جایی دورهٔ انتظار (T_dep)، جابه‌جایی دورهٔ بازپرداخت
-                (T_loan)، جابه‌جایی نرخ عقد همهٔ پله‌ها و کج‌کردن سهم تخصیص به سمت پله‌های با انتظار بلند یا کوتاه. همهٔ
-                اهرم‌ها روی پله‌های جاری شما اعمال می‌شوند و هیچ ضریبی در کد ثابت نشده است.
+                اهرم‌های جست‌وجو: مقیاس منطقی ضرایب برابری (α)، جابه‌جایی دورهٔ انتظار (T_dep) و جابه‌جایی دورهٔ بازپرداخت
+                (T_loan). نرخ اختصاصی، سهم تخصیص و حداقل ماندهٔ همهٔ حالت‌ها دقیقاً ثابت می‌ماند و دورهٔ بازپرداخت فقط از
+                گزینه‌های معتبر همان طرح انتخاب می‌شود.
               </p>
             </div>
           )}
@@ -440,12 +439,12 @@ export function OptimizerPanel({ input, onApply }: Props) {
       {result && <OptimizerResultTable result={result} objective={objective} stale={stale} onApplyLevers={applyLeversOf} />}
 
       <div className="border-t border-slate-100 px-5 py-3 text-[11px] leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        روش حل: <b>جست‌وجوی نزولی مختصاتی چندشروعی</b> روی شبکهٔ گسستهٔ پنج اهرم با حداکثر سه گذر از هر نقطهٔ شروع (طرح جاری
+        روش حل: <b>جست‌وجوی نزولی مختصاتی چندشروعی</b> روی شبکهٔ گسستهٔ سه اهرم با حداکثر سه گذر از هر نقطهٔ شروع (طرح جاری
         + کران‌های هر اهرم) تا احتمال گیرافتادن در بهینهٔ محلی کمتر شود. ترتیب اولویت: <b>۱)</b> موجه بودن (رعایت همهٔ
         قیدها) اولویت مطلق دارد؛ <b>۲)</b> اگر هیچ طرحی موجه نبود، کمترین «شدت نقض» — نه بزرگ‌ترین عدد هدف — ملاک است تا
         موتور طرحی را پیشنهاد ندهد که فقط سود را بالا می‌برد و کسری نقدینگی را چند برابر می‌کند؛ <b>۳)</b> سپس مقدار هدف
         بیشینه می‌شود و <b>۴)</b> در تساوی، طراحی نزدیک‌تر به طرح جاری انتخاب می‌شود. ترکیب‌های اهرمی که پس از مهار در
-        کران‌های قانونی به پله‌های یکسان می‌رسند، یک نامزد بیشتر اشغال نمی‌کنند. «اعمال» فقط پله‌ها را جایگزین می‌کند؛
+        کران‌های قانونی و گزینه‌های معتبر به پله‌های یکسان می‌رسند، یک نامزد بیشتر اشغال نمی‌کنند. «اعمال» فقط پله‌ها را جایگزین می‌کند؛
         پیکربندی کلان و رفتار دست‌نخورده می‌ماند.
       </div>
     </Card>

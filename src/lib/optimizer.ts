@@ -2,13 +2,11 @@
  *  DESIGN OPTIMIZER — «طراح معکوس»
  *
  *  کاربر هدف و قیدها را تعیین می‌کند و موتور با جست‌وجوی مختصاتی
- *  چندشروعی (Multi-Start Coordinate Descent) روی پنج اهرم طراحی،
+ *  چندشروعی (Multi-Start Coordinate Descent) روی سه اهرم طراحی،
  *  بهترین ترکیب را می‌یابد:
  *     1) alphaScale  — مقیاس ضرایب برابری (حجم تسهیلات)
  *     2) tDepShift   — جابه‌جایی دورهٔ انتظار همهٔ پله‌ها (زمان‌بندی خروج)
  *     3) tLoanShift  — جابه‌جایی دورهٔ بازپرداخت (زمان‌بندی ورود اقساط)
- *     4) rateShift   — جابه‌جایی نرخ عقد همهٔ پله‌ها (قیمت‌گذاری)
- *     5) tilt        — کج‌کردن سهم تخصیص به سمت پله‌های با انتظار بلند/کوتاه
  *
  *  سه اصل حاکم بر جست‌وجو:
  *   • «موجه بودن» اولویت مطلق دارد؛ اگر هیچ طرحی همهٔ قیدها را برآورده
@@ -22,13 +20,11 @@
  * ------------------------------------------------------------------ */
 
 import type { SimInput, SimKpis, Tier } from '../types';
-import { EPS, bounded, finite, globalRate, simulate } from './engine';
-import { IMPORT_RATE_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
+import { EPS, bounded, finite, simulate } from './engine';
+import { TIER_ALPHA_MAX, TIER_ALPHA_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
 import { fmtNumber, fmtPct, fmtRatio, toFa } from './format';
 
 export type Objective = 'margin' | 'income' | 'volume' | 'safety';
-export type AllocationTilt = 'none' | 'longWait' | 'shortWait';
-
 export interface DesignLevers {
   /** درصد — ۱۰۰ یعنی بدون تغییر */
   alphaScale: number;
@@ -36,25 +32,18 @@ export interface DesignLevers {
   tDepShift: number;
   /** ماه — منفی یعنی بازپرداخت کوتاه‌تر */
   tLoanShift: number;
-  /** واحد درصد — منفی یعنی نرخ عقد ارزان‌تر؛ روی نرخ اختصاصی پله یا نرخ سراسری اعمال می‌شود */
-  rateShift: number;
-  tilt: AllocationTilt;
 }
 
 export const NEUTRAL_LEVERS: DesignLevers = {
   alphaScale: 100,
   tDepShift: 0,
   tLoanShift: 0,
-  rateShift: 0,
-  tilt: 'none',
 };
 
 export const LEVER_GRID = {
-  alphaScale: [60, 75, 90, 100, 110, 125, 150, 175, 200],
-  tDepShift: [-4, -3, -2, -1, 0, 1, 2, 3, 4],
-  tLoanShift: [-18, -12, -6, 0, 6, 12, 18, 24],
-  rateShift: [-6, -3, 0, 3, 6, 9, 12, 15],
-  tilt: ['none', 'longWait', 'shortWait'] as AllocationTilt[],
+  alphaScale: [75, 85, 100, 115, 125],
+  tDepShift: [-3, -2, -1, 0, 1, 2, 3],
+  tLoanShift: [-24, -12, 0, 12, 24],
 };
 
 export const OBJECTIVE_LABELS: Record<Objective, { label: string; hint: string }> = {
@@ -89,13 +78,13 @@ export const DEFAULT_CONSTRAINTS: Constraints = {
   maxHolePct: 45,
   requireSolvent: false,
   maxLeverage: 0,
-  requirePositiveMargin: true,
+  requirePositiveMargin: false,
 };
 
 export const leverKey = (l: DesignLevers): string =>
   `${Math.round(finite(l.alphaScale, 100) * 100) / 100}|${Math.round(finite(l.tDepShift, 0))}|${Math.round(
     finite(l.tLoanShift, 0),
-  )}|${Math.round(finite(l.rateShift, 0) * 10) / 10}|${l.tilt}`;
+  )}`;
 
 /**
  * نقاط شروع قطعی جست‌وجوی چندشروعی: طرح جاری + کران بالا و پایین هر
@@ -104,16 +93,12 @@ export const leverKey = (l: DesignLevers): string =>
  */
 export const MULTI_STARTS: DesignLevers[] = [
   NEUTRAL_LEVERS,
-  { ...NEUTRAL_LEVERS, alphaScale: 60 },
-  { ...NEUTRAL_LEVERS, alphaScale: 200 },
+  { ...NEUTRAL_LEVERS, alphaScale: 75 },
+  { ...NEUTRAL_LEVERS, alphaScale: 125 },
   { ...NEUTRAL_LEVERS, tDepShift: -3 },
-  { ...NEUTRAL_LEVERS, tDepShift: 4 },
-  { ...NEUTRAL_LEVERS, tLoanShift: -18 },
+  { ...NEUTRAL_LEVERS, tDepShift: 3 },
+  { ...NEUTRAL_LEVERS, tLoanShift: -24 },
   { ...NEUTRAL_LEVERS, tLoanShift: 24 },
-  { ...NEUTRAL_LEVERS, rateShift: 6 },
-  { ...NEUTRAL_LEVERS, rateShift: 15 },
-  { ...NEUTRAL_LEVERS, tilt: 'longWait' },
-  { ...NEUTRAL_LEVERS, tilt: 'shortWait' },
 ];
 
 /** فاصله از طراحی پایه — برای شکستن تساوی تا موتور بی‌دلیل طرح را تغییر ندهد */
@@ -121,9 +106,7 @@ export function leverDistance(l: DesignLevers): number {
   return (
     Math.abs(finite(l.alphaScale, 100) - 100) / 100 +
     Math.abs(finite(l.tDepShift, 0)) / 3 +
-    Math.abs(finite(l.tLoanShift, 0)) / 12 +
-    Math.abs(finite(l.rateShift, 0)) / 6 +
-    (l.tilt === 'none' ? 0 : 1)
+    Math.abs(finite(l.tLoanShift, 0)) / 12
   );
 }
 
@@ -152,77 +135,51 @@ export function designFingerprint(tiers: Tier[]): string {
     .join(';');
 }
 
-/** بخش مقیاس/جابه‌جایی اهرم‌ها (بدون کج‌کردن سهم‌ها) */
-function applyShifts(tiers: Tier[], l: DesignLevers, fallbackRate: number): Tier[] {
+/** قواعد دامنهٔ جست‌وجو؛ خروجی بهینه‌یاب باید همواره در جدول جاری قابل انتخاب باشد. */
+interface DesignRules {
+  waitMin: number;
+  waitMax: number;
+  alphaMin: number;
+  alphaMax: number;
+  repaymentTerms: number[];
+}
+
+function rulesFor(input?: SimInput): DesignRules {
+  if (input?.config.contractType === 'qard') {
+    return { waitMin: 1, waitMax: 18, alphaMin: 2.5, alphaMax: 225, repaymentTerms: [12, 24, 36, 48, 60] };
+  }
+  const tiers = input?.tiers ?? [];
+  const terms = [...new Set(tiers.map((t) => Math.round(finite(t.tLoan, 0))).filter((v) => v >= 6 && v <= 60))].sort((a, b) => a - b);
+  return {
+    waitMin: tiers.length ? Math.max(TIER_WAIT_MIN, Math.min(...tiers.map((t) => finite(t.tDep, TIER_WAIT_MIN)))) : TIER_WAIT_MIN,
+    waitMax: tiers.length ? Math.min(TIER_WAIT_MAX, Math.max(...tiers.map((t) => finite(t.tDep, TIER_WAIT_MAX)))) : TIER_WAIT_MAX,
+    alphaMin: tiers.length ? Math.max(TIER_ALPHA_MIN, Math.min(...tiers.map((t) => finite(t.alpha, TIER_ALPHA_MIN)))) : TIER_ALPHA_MIN,
+    alphaMax: tiers.length ? Math.min(TIER_ALPHA_MAX, Math.max(...tiers.map((t) => finite(t.alpha, TIER_ALPHA_MAX)))) : TIER_ALPHA_MAX,
+    repaymentTerms: terms.length ? terms : [12, 24, 36, 48, 60],
+  };
+}
+
+function nearestTerm(value: number, terms: number[]): number {
+  return terms.reduce((best, term) => (Math.abs(term - value) < Math.abs(best - value) ? term : best), terms[0]);
+}
+
+/**
+ * فقط سه اهرم مجاز را اعمال می‌کند. نرخ اختصاصی، سهم تخصیص، حداقل مانده و
+ * شناسهٔ هر حالت عیناً حفظ می‌شوند. دورهٔ بازپرداخت نیز به نزدیک‌ترین گزینهٔ
+ * واقعی همان محصول نگاشت می‌شود تا خروجی‌های غیرعادی مثل ۱۸ یا ۳۰ ماه ساخته نشود.
+ */
+export function applyLevers(tiers: Tier[], l: DesignLevers, rules: DesignRules = rulesFor()): Tier[] {
   const list = Array.isArray(tiers) ? tiers.filter((t) => !!t) : [];
   const scale = bounded(l.alphaScale, 0, 1e6, 100) / 100;
   const depShift = Math.round(finite(l.tDepShift, 0));
   const loanShift = Math.round(finite(l.tLoanShift, 0));
-  const rateShift = Math.round(finite(l.rateShift, 0) * 10) / 10;
 
-  // اهرم‌ها روی یک نسخهٔ پاک‌سازی‌شده اعمال می‌شوند تا خروجی بهینه‌یاب
-  // هرگز مقدار NaN یا منفی را به وضعیت برنامه برنگرداند.
-  return list.map((t) => {
-    const override = t.rateOverride;
-    const hasOverride = override !== null && override !== undefined && Number.isFinite(override);
-    // سقف نرخ همان سقف سازندهٔ پله و ورود فایل است تا «اعمال» طرحی نسازد
-    // که کاربر نتواند ویرایش کند یا در JSON بازگرداند.
-    const shiftedRate =
-      rateShift === 0
-        ? hasOverride
-          ? bounded(override, 0, IMPORT_RATE_MAX, 0)
-          : null
-        : bounded((hasOverride ? (override as number) : finite(fallbackRate, 0)) + rateShift, 0, IMPORT_RATE_MAX, 0);
-
-    return {
-      ...t,
-      // سقف همان سقف سازندهٔ پله است تا «اعمال» طرحی نسازد که کاربر نتواند ویرایش یا ذخیره کند
-      alpha: bounded(Math.max(0, finite(t.alpha, 0)) * scale, 0, TIER_ALPHA_MAX, 0),
-      tDep: bounded(t.tDep + depShift, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN),
-      tLoan: bounded(t.tLoan + loanShift, 6, 60, 12),
-      allocation: Math.max(0, finite(t.allocation, 0)),
-      minBalance: Math.max(0, finite(t.minBalance, 0)),
-      rateOverride: shiftedRate,
-    };
-  });
-}
-
-/** بازتوزیع سهم تخصیص بر پایهٔ دورهٔ انتظار، با حفظ دقیق مجموع سهم‌ها */
-function applyTilt(base: Tier[], tilt: AllocationTilt): Tier[] {
-  if (tilt === 'none') return base;
-  const total = base.reduce((s, t) => s + t.allocation, 0);
-  if (!(total > 0)) return base;
-  // وزن‌دهی بر پایهٔ دورهٔ انتظار، با حفظ مجموع سهم‌ها (بدون تغییر کل منابع تخصیصی)
-  const weight = (t: Tier) => {
-    const dep = bounded(t.tDep, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN);
-    return tilt === 'longWait'
-      ? 0.5 + dep / TIER_WAIT_MAX
-      : 0.5 + (TIER_WAIT_MAX + TIER_WAIT_MIN - dep) / TIER_WAIT_MAX;
-  };
-  const wSum = base.reduce((s, t) => s + t.allocation * weight(t), 0);
-  if (!(wSum > 0)) return base;
-  const raw = base.map((t) => (t.allocation * weight(t) * total) / wSum);
-  // گرد کردن به دو رقم اعشار و بازگرداندن خطای گردکردن به بزرگ‌ترین سهم، تا جمع دقیقاً حفظ شود
-  const rounded = raw.map((v) => Math.round(v * 100) / 100);
-  const drift = total - rounded.reduce((s, v) => s + v, 0);
-  if (Math.abs(drift) > 1e-9) {
-    let idx = 0;
-    for (let i = 1; i < rounded.length; i++) if (rounded[i] > rounded[idx]) idx = i;
-    rounded[idx] = Math.max(0, rounded[idx] + drift);
-  }
-  return base.map((t, i) => ({ ...t, allocation: rounded[i] }));
-}
-
-/**
- * اعمال کامل اهرم‌ها روی پله‌ها: مقیاس/جابه‌جایی و سپس کج‌کردن سهم‌ها.
- *
- * @param fallbackRate نرخ سراسری عقد؛ فقط وقتی لازم می‌شود که `rateShift`
- *   مخالف صفر باشد و پله‌ای نرخ اختصاصی نداشته باشد — در آن حالت نرخ
- *   سراسری + جابه‌جایی به‌صورت نرخ اختصاصی ثبت می‌شود. در مسیر برنامه این
- *   مقدار همیشه از `globalRate(config)` می‌آید (`designTiers` را ببینید).
- */
-export function applyLevers(tiers: Tier[], l: DesignLevers, fallbackRate = 0): Tier[] {
-  return applyTilt(applyShifts(tiers, l, fallbackRate), l.tilt);
+  return list.map((t) => ({
+    ...t,
+    alpha: bounded(Math.max(0, finite(t.alpha, rules.alphaMin)) * scale, rules.alphaMin, rules.alphaMax, rules.alphaMin),
+    tDep: bounded(finite(t.tDep, rules.waitMin) + depShift, rules.waitMin, rules.waitMax, rules.waitMin),
+    tLoan: nearestTerm(finite(t.tLoan, rules.repaymentTerms[0]) + loanShift, rules.repaymentTerms),
+  }));
 }
 
 export function objectiveValue(k: SimKpis, objective: Objective): number {
@@ -393,7 +350,7 @@ export function optimizeDesign(input: SimInput, opts: OptimizeOptions): Optimiza
   const topN = Math.max(1, Math.round(finite(opts.topN, 6)));
   const { objective, constraints } = opts;
   const starts = opts.multiStart === false ? [NEUTRAL_LEVERS] : MULTI_STARTS;
-  const fallbackRate = globalRate(input.config);
+  const rules = rulesFor(input);
 
   const byLever = new Map<string, CandidateDesign>();
   const byDesign = new Map<string, CandidateDesign>();
@@ -402,7 +359,7 @@ export function optimizeDesign(input: SimInput, opts: OptimizeOptions): Optimiza
     const key = leverKey(l);
     const hit = byLever.get(key);
     if (hit) return hit;
-    const tiers = applyLevers(input.tiers, l, fallbackRate);
+    const tiers = applyLevers(input.tiers, l, rules);
     const fingerprint = designFingerprint(tiers);
     // ترکیب‌های اهرمی که به پله‌های یکسان می‌رسند فقط یک‌بار شبیه‌سازی می‌شوند
     // و در فهرست نامزدها هم یک ردیف بیشتر اشغال نمی‌کنند.
@@ -422,7 +379,7 @@ export function optimizeDesign(input: SimInput, opts: OptimizeOptions): Optimiza
     for (let pass = 0; pass < passes; pass++) {
       usedPasses = Math.max(usedPasses, pass + 1);
       let improvedThisPass = false;
-      for (const dim of ['alphaScale', 'tDepShift', 'tLoanShift', 'rateShift', 'tilt'] as const) {
+      for (const dim of ['alphaScale', 'tDepShift', 'tLoanShift'] as const) {
         let best = cursor;
         for (const v of LEVER_GRID[dim]) {
           const cand = evalLevers({ ...cursor.levers, [dim]: v });
@@ -466,16 +423,12 @@ export function describeLevers(l: DesignLevers): string[] {
   if (d !== 0) out.push(`دورهٔ انتظار ${d > 0 ? '+' : '−'}${fmtNumber(Math.abs(d))} ماه`);
   const t = Math.round(finite(l.tLoanShift, 0));
   if (t !== 0) out.push(`بازپرداخت ${t > 0 ? '+' : '−'}${fmtNumber(Math.abs(t))} ماه`);
-  const r = Math.round(finite(l.rateShift, 0) * 10) / 10;
-  if (Math.abs(r) > 0.01) out.push(`نرخ عقد ${r > 0 ? '+' : '−'}${fmtNumber(Math.abs(r), 1, true)} واحد درصد`);
-  if (l.tilt === 'longWait') out.push('سهم بیشتر به پله‌های با انتظار بلند');
-  if (l.tilt === 'shortWait') out.push('سهم بیشتر به پله‌های با انتظار کوتاه');
   return out.length ? out : ['بدون تغییر (طرح جاری)'];
 }
 
-/** پله‌های یک طرح با نرخ سراسریِ پیکربندی جاری — تنها راه درستِ اعمال اهرم‌ها */
+/** اعمال سه اهرم مجاز با قواعد دوره و دامنهٔ محصول جاری */
 export function designTiers(input: SimInput, levers: DesignLevers): Tier[] {
-  return applyLevers(input.tiers, levers, globalRate(input.config));
+  return applyLevers(input.tiers, levers, rulesFor(input));
 }
 
 /** ورودی به‌روز‌شده پس از اعمال یک طرح — برای «اعمال» در یک کلیک */

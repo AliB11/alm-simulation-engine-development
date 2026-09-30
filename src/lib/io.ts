@@ -1,7 +1,7 @@
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, MonthRow, SimKpis, Tier } from '../types';
 import { DEFAULT_BEHAVIOR, DEFAULT_CONFIG, DEFAULT_PRESET, DEFAULT_SCHEDULE, PRESETS, presetTiers } from './presets';
 import { EVENT_META } from './eventMeta';
-import { IMPORT_MONEY_MAX, IMPORT_RATE_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
+import { IMPORT_MONEY_MAX, IMPORT_RATE_MAX, TIER_ALPHA_MAX, TIER_ALPHA_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
 import { DEFAULT_REGULATORY, type RegulatoryParams } from './regulatory';
 import { EMPTY_SLOTS, SLOT_IDS, type ScenarioSlot, type ScenarioSlots } from './scenarios';
 
@@ -76,7 +76,7 @@ function sanitizeTiers(v: unknown): Tier[] | undefined {
       name: typeof item.name === 'string' ? item.name.slice(0, 120) : `پله ${i + 1}`,
       tDep: finiteNumber(item.tDep, TIER_WAIT_MIN, TIER_WAIT_MIN, TIER_WAIT_MAX, true),
       tLoan: finiteNumber(item.tLoan, 12, 6, 60, true),
-      alpha: finiteNumber(item.alpha, 100, 0, TIER_ALPHA_MAX),
+      alpha: finiteNumber(item.alpha, 100, TIER_ALPHA_MIN, TIER_ALPHA_MAX),
       minBalance: finiteNumber(item.minBalance, 0, 0, IMPORT_MONEY_MAX),
       allocation: finiteNumber(item.allocation, 0, 0, 100),
       rateOverride:
@@ -150,7 +150,10 @@ export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
               (tier.alpha >= activePreset.alphaRange[0] && tier.alpha <= activePreset.alphaRange[1])) &&
             (!activePreset.tierRateRange ||
               tier.rateOverride === null ||
-              (tier.rateOverride >= activePreset.tierRateRange[0] && tier.rateOverride <= activePreset.tierRateRange[1])),
+              (tier.rateOverride >= activePreset.tierRateRange[0] && tier.rateOverride <= activePreset.tierRateRange[1])) &&
+            (!activePreset.rateOptions ||
+              tier.rateOverride === null ||
+              activePreset.rateOptions.includes(tier.rateOverride)),
         ));
     out.activePreset = tierOptionsMatch ? activePreset.key : null;
   } else if (raw.activePreset === null) {

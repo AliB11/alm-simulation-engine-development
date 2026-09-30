@@ -60,7 +60,7 @@ suite('UI smoke — server render of every section', () => {
   test('renders the whole application without throwing or leaking NaN', () => {
     const html = render(<App />);
     assert.ok(html.length > 50_000, `unexpectedly small document: ${html.length}`);
-    assert.ok(html.includes('نمونه طرح اول · نگین امید زرین بانک سپه'), 'the new default profile should be visible');
+    assert.ok(html.includes('نمونه طرح اول'), 'the new default profile should be visible');
     assert.ok(html.includes('نمونه طرح سوم'), 'the revised third sample should remain available');
     assert.ok(!html.includes('نمونه طرح دوم'), 'the deleted second sample must not render');
     assertNoBrokenNumbers(html, 'App');
@@ -186,7 +186,7 @@ suite('UI smoke — server render of every section', () => {
       for (const t of tiers) {
         assert.ok(t.tDep >= 1 && t.tDep <= TIER_WAIT_MAX, `applied waiting period out of range: ${t.tDep}`);
         assert.ok(t.tLoan >= 6 && t.tLoan <= 60, `applied repayment term out of range: ${t.tLoan}`);
-        assert.ok(t.alpha >= 0 && t.alpha <= 500, `applied alpha out of range: ${t.alpha}`);
+        assert.ok(t.alpha >= 2.5 && t.alpha <= 225, `applied alpha out of range: ${t.alpha}`);
         assert.ok(t.rateOverride === null || (t.rateOverride >= 0 && t.rateOverride <= 60), `applied rate out of range: ${t.rateOverride}`);
       }
       applied.push(label);

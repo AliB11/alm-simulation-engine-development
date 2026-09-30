@@ -88,24 +88,25 @@ const SAMPLE_THREE_REPAYMENT_TERMS = [16, 24, 32, 40, 48, 56, 60] as const;
 export const PRESETS: Preset[] = [
   {
     key: 'sample-1',
-    name: 'نمونه طرح اول · نگین امید زرین بانک سپه',
+    name: 'نمونه طرح اول',
     description:
-      'قرض‌الحسنه با کارمزد انتخابی ۰، ۲ یا ۴٪؛ انتظار ۱ تا ۱۸ ماه و اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه. سقف کل اعلامی ۱ میلیارد تومان است؛ چون منابع درباره سقف فردی اختلاف دارند، مدل به‌طور محافظه‌کارانه ۳۰۰ میلیون می‌گیرد. ضرایب و سهم‌ها آموزشی‌اند.',
+      'قرض‌الحسنه با کارمزد انتخابی ۰، ۲ یا ۴٪؛ انتظار ۱ تا ۱۸ ماه، اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه و ضریب برابری ۲٫۵٪ تا ۲۲۵٪. سقف کل اعلامی ۱ میلیارد تومان است؛ چون منابع درباره سقف فردی اختلاف دارند، مدل به‌طور محافظه‌کارانه ۳۰۰ میلیون می‌گیرد. ضرایب و سهم‌ها آموزشی‌اند.',
     contractType: 'qard',
     rate: 2,
     rateOptions: [0, 2, 4],
     repaymentTerms: SAMPLE_ONE_REPAYMENT_TERMS,
     waitingRange: [1, 18],
+    alphaRange: [2.5, 225],
     programCap: 1_000_000_000,
     loanCap: 300_000_000,
     depositProfitRate: 0,
     tiers: [
-      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 16.67, minBalance: 0, allocation: 30, rateOverride: null },
-      { name: tierLabel(1), tDep: 18, tLoan: 12, alpha: 300, minBalance: 0, allocation: 5, rateOverride: null },
-      { name: tierLabel(2), tDep: 18, tLoan: 24, alpha: 150, minBalance: 0, allocation: 20, rateOverride: null },
-      { name: tierLabel(3), tDep: 18, tLoan: 36, alpha: 100, minBalance: 0, allocation: 20, rateOverride: null },
-      { name: tierLabel(4), tDep: 18, tLoan: 48, alpha: 75, minBalance: 0, allocation: 15, rateOverride: null },
-      { name: tierLabel(5), tDep: 18, tLoan: 60, alpha: 60, minBalance: 0, allocation: 10, rateOverride: null },
+      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 2.5, minBalance: 0, allocation: 60, rateOverride: null },
+      { name: tierLabel(1), tDep: 18, tLoan: 12, alpha: 225, minBalance: 0, allocation: 3, rateOverride: null },
+      { name: tierLabel(2), tDep: 18, tLoan: 24, alpha: 112.5, minBalance: 0, allocation: 10, rateOverride: null },
+      { name: tierLabel(3), tDep: 18, tLoan: 36, alpha: 75, minBalance: 0, allocation: 12, rateOverride: null },
+      { name: tierLabel(4), tDep: 18, tLoan: 48, alpha: 56.25, minBalance: 0, allocation: 9, rateOverride: null },
+      { name: tierLabel(5), tDep: 18, tLoan: 60, alpha: 45, minBalance: 0, allocation: 6, rateOverride: null },
     ],
   },
   {
