@@ -1,7 +1,7 @@
 import type { Behavior, Currency, DepositSchedule, GlobalConfig, MonthRow, SimKpis, Tier } from '../types';
-import { DEFAULT_BEHAVIOR, DEFAULT_CONFIG, DEFAULT_SCHEDULE, PRESETS } from './presets';
+import { DEFAULT_BEHAVIOR, DEFAULT_CONFIG, DEFAULT_PRESET, DEFAULT_SCHEDULE, PRESETS, presetTiers } from './presets';
 import { EVENT_META } from './eventMeta';
-import { IMPORT_MONEY_MAX, IMPORT_RATE_MAX, TIER_ALPHA_MAX } from './limits';
+import { IMPORT_MONEY_MAX, IMPORT_RATE_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
 import { DEFAULT_REGULATORY, type RegulatoryParams } from './regulatory';
 import { EMPTY_SLOTS, SLOT_IDS, type ScenarioSlot, type ScenarioSlots } from './scenarios';
 
@@ -74,7 +74,7 @@ function sanitizeTiers(v: unknown): Tier[] | undefined {
     out.push({
       id,
       name: typeof item.name === 'string' ? item.name.slice(0, 120) : `پله ${i + 1}`,
-      tDep: finiteNumber(item.tDep, 1, 1, 12, true),
+      tDep: finiteNumber(item.tDep, TIER_WAIT_MIN, TIER_WAIT_MIN, TIER_WAIT_MAX, true),
       tLoan: finiteNumber(item.tLoan, 12, 6, 60, true),
       alpha: finiteNumber(item.alpha, 100, 0, TIER_ALPHA_MAX),
       minBalance: finiteNumber(item.minBalance, 0, 0, IMPORT_MONEY_MAX),
@@ -136,8 +136,23 @@ export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
   if (schedule) out.schedule = schedule;
   const tiers = sanitizeTiers(raw.tiers);
   if (tiers) out.tiers = tiers;
-  if (typeof raw.activePreset === 'string' && PRESETS.some((p) => p.key === raw.activePreset)) {
-    out.activePreset = raw.activePreset;
+  const activePreset = typeof raw.activePreset === 'string' ? PRESETS.find((preset) => preset.key === raw.activePreset) : undefined;
+  if (activePreset) {
+    const tierOptionsMatch =
+      tiers === undefined ||
+      (tiers.length > 0 &&
+        tiers.every(
+          (tier) =>
+            (!activePreset.repaymentTerms || activePreset.repaymentTerms.includes(tier.tLoan)) &&
+            (!activePreset.waitingRange ||
+              (tier.tDep >= activePreset.waitingRange[0] && tier.tDep <= activePreset.waitingRange[1])) &&
+            (!activePreset.alphaRange ||
+              (tier.alpha >= activePreset.alphaRange[0] && tier.alpha <= activePreset.alphaRange[1])) &&
+            (!activePreset.tierRateRange ||
+              tier.rateOverride === null ||
+              (tier.rateOverride >= activePreset.tierRateRange[0] && tier.rateOverride <= activePreset.tierRateRange[1])),
+        ));
+    out.activePreset = tierOptionsMatch ? activePreset.key : null;
   } else if (raw.activePreset === null) {
     out.activePreset = null;
   }
@@ -152,8 +167,26 @@ export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
 
 export function loadState(): Partial<PersistedState> | null {
   try {
-    const raw = localStorage.getItem(STATE_KEY);
-    return raw ? sanitizeState(JSON.parse(raw)) : null;
+    const stored = localStorage.getItem(STATE_KEY);
+    if (!stored) return null;
+    const raw: unknown = JSON.parse(stored);
+    const state = sanitizeState(raw);
+    if (!state || !isObj(raw)) return state;
+
+    // نمونه‌های فعال از نو از فهرست جاری ساخته می‌شوند؛ بنابراین پس از
+    // تغییر شرایط نمونه، مرورگر ردیف‌های قدیمی را با گزینه‌های تازه مخلوط نمی‌کند.
+    // الگوی حذف‌شدهٔ دوم نیز به نمونهٔ پیش‌فرض جدید منتقل می‌شود. تنظیمات
+    // پیکربندی و رفتار کاربر (از جمله سقف و کارمزد انتخابی) حفظ می‌شوند.
+    const key = raw.activePreset === 'sample-2' ? DEFAULT_PRESET : raw.activePreset;
+    const targetPreset = typeof key === 'string' ? PRESETS.find((preset) => preset.key === key) : undefined;
+    if (!targetPreset) return state;
+    const contractType = state.config?.contractType ?? DEFAULT_CONFIG.contractType;
+    if (contractType !== targetPreset.contractType) return { ...state, activePreset: null };
+    return {
+      ...state,
+      tiers: presetTiers(targetPreset.key),
+      activePreset: targetPreset.key,
+    };
   } catch {
     return null;
   }

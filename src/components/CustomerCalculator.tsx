@@ -4,6 +4,7 @@ import type { GlobalConfig, Tier } from '../types';
 import { estimateTierOffer } from '../lib/engine';
 import { fmtCompact, fmtPct, toFa } from '../lib/format';
 import { tierLabel } from '../lib/presets';
+import { TIER_WAIT_MAX, TIER_WAIT_MIN } from '../lib/limits';
 import { useDisplay } from '../context/display';
 import { Badge, Card, CardHeader, Field, Money, NumField } from './ui';
 import { cn } from '../utils/cn';
@@ -31,7 +32,7 @@ export function CustomerCalculator({ tiers, config }: Props) {
         new Set(
           tiers
             .map((tier) => Math.round(tier.tDep))
-            .filter((months) => Number.isFinite(months) && months >= 1 && months <= 12),
+            .filter((months) => Number.isFinite(months) && months >= TIER_WAIT_MIN && months <= TIER_WAIT_MAX),
         ),
       ).sort((a, b) => a - b),
     [tiers],

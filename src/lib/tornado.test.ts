@@ -8,7 +8,7 @@ import { presetInput } from './testUtils';
 const METRICS: SensMetric[] = ['maxHole', 'tipping', 'endCum', 'leverage', 'margin'];
 
 describe('tornado — one-at-a-time risk drivers', () => {
-  const input = presetInput('sample-2');
+  const input = presetInput('sample-1');
 
   it('runs exactly two simulations per risk variable plus the base case', () => {
     const t = runTornado(input, 'maxHole');

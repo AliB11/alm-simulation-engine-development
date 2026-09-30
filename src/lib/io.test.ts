@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildLedgerCsv, sanitizeSlots, sanitizeState } from './io';
+import { buildLedgerCsv, loadState, sanitizeSlots, sanitizeState } from './io';
+import { DEFAULT_CONFIG, PRESETS } from './presets';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
 
@@ -33,12 +34,136 @@ describe('scenario import validation', () => {
     assert.equal(state?.behavior?.takeUpRate, 100);
     assert.equal(state?.behavior?.totalDeposit, 50_000_000_000);
     const t = state?.tiers?.[0];
-    assert.equal(t?.tDep, 12);
+    assert.equal(t?.tDep, 18);
     assert.equal(t?.tLoan, 6);
     assert.equal(t?.alpha, 100);
     assert.equal(t?.minBalance, 0);
     assert.equal(t?.allocation, 100);
     assert.equal(t?.rateOverride, 60);
+  });
+
+  it('does not revive the removed sample plan two from an imported scenario', () => {
+    const state = sanitizeState({ activePreset: 'sample-2', tiers: [] });
+    assert.ok(state);
+    assert.deepEqual(state.tiers, []);
+    assert.equal('activePreset' in state, false);
+  });
+
+  it('drops an active-profile label when imported tiers use obsolete repayment terms', () => {
+    const state = sanitizeState({
+      activePreset: 'sample-3',
+      tiers: [{ id: 'legacy', tDep: 3, tLoan: 12, alpha: 60, allocation: 100, rateOverride: 5 }],
+    });
+    assert.equal(state?.activePreset, null);
+    assert.equal(state?.tiers?.[0].tLoan, 12, 'the imported user tier itself should be preserved');
+  });
+
+  it('migrates a persisted default sample two to the new sample-one preset', () => {
+    const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    const saved = JSON.stringify({
+      activePreset: 'sample-2',
+      config: {
+        contractType: 'qard',
+        qardFeeRate: 4,
+        loanCap: 300_000_000,
+        depositProfitRate: 0,
+        horizon: 60,
+      },
+      tiers: [{ id: 'legacy', tDep: 4, tLoan: 12, alpha: 110, allocation: 100 }],
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: () => saved } as unknown as Storage,
+    });
+    try {
+      const state = loadState();
+      assert.equal(state?.activePreset, 'sample-1');
+      assert.equal(state?.config?.loanCap, 300_000_000);
+      assert.equal(state?.config?.qardFeeRate, 4, 'a supported user fee choice should be preserved');
+      assert.ok(state?.tiers?.some((tier) => tier.tDep === 18), 'the new plan-one terms should replace the removed preset tiers');
+    } finally {
+      if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+      else Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  });
+
+  it('does not apply the removed preset migration across a user-changed contract', () => {
+    const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    const saved = JSON.stringify({
+      activePreset: 'sample-2',
+      config: { ...DEFAULT_CONFIG, contractType: 'murabaha' },
+      tiers: [{ id: 'custom', tDep: 4, tLoan: 12, alpha: 110, allocation: 100 }],
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: () => saved } as unknown as Storage,
+    });
+    try {
+      const state = loadState();
+      assert.equal(state?.activePreset, null);
+      assert.equal(state?.config?.contractType, 'murabaha');
+      assert.equal(state?.tiers?.[0].tDep, 4, 'the custom user design should be preserved');
+    } finally {
+      if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+      else Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  });
+
+  it('refreshes active sample-one and sample-three tiers after their terms change, preserving user configuration', () => {
+    const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    let saved = '';
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: () => saved } as unknown as Storage,
+    });
+    const cases = [
+      {
+        key: 'sample-1',
+        contractType: 'qard',
+        oldTerms: [6, 12, 24, 12, 36, 60],
+        waiting: [1, 3, 6, 12, 12, 12],
+      },
+      {
+        key: 'sample-3',
+        contractType: 'murabaha',
+        oldTerms: [12, 16, 21, 25, 29, 34, 38, 43, 47, 51, 56, 60],
+        waiting: [3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12],
+      },
+    ] as const;
+
+    try {
+      for (const entry of cases) {
+        const config = {
+          ...DEFAULT_CONFIG,
+          contractType: entry.contractType,
+          qardFeeRate: 4,
+          loanCap: 450_000_000,
+        };
+        saved = JSON.stringify({
+          activePreset: entry.key,
+          config,
+          tiers: entry.oldTerms.map((tLoan, index) => ({
+            id: `legacy-${index}`,
+            tDep: entry.waiting[index],
+            tLoan,
+            alpha: 60,
+            allocation: 100 / entry.oldTerms.length,
+            rateOverride: entry.contractType === 'qard' ? null : 5,
+          })),
+        });
+        const state = loadState();
+        const currentPreset = PRESETS.find((preset) => preset.key === entry.key);
+        assert.ok(currentPreset);
+        assert.equal(state?.activePreset, entry.key);
+        assert.deepEqual(state?.tiers?.map((tier) => tier.tLoan), currentPreset.tiers.map((tier) => tier.tLoan));
+        assert.equal(state?.config?.contractType, entry.contractType);
+        assert.equal(state?.config?.loanCap, 450_000_000);
+        assert.equal(state?.config?.qardFeeRate, 4);
+      }
+    } finally {
+      if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+      else Reflect.deleteProperty(globalThis, 'localStorage');
+    }
   });
 
   it('de-duplicates imported tier ids so React keys stay unique', () => {
@@ -85,7 +210,7 @@ describe('general ledger CSV export', () => {
   });
 
   it('scales amounts with the display factor and escapes embedded quotes', () => {
-    const input = presetInput('sample-2');
+    const input = presetInput('sample-1');
     const result = simulate(input, true);
     const toman = buildLedgerCsv(result.rows, 1, 'تومان');
     const rial = buildLedgerCsv(result.rows, 10, 'ریال');
@@ -116,7 +241,7 @@ describe('general ledger CSV export', () => {
 
 describe('scenario slot persistence', () => {
   const validSlot = () => {
-    const input = presetInput('sample-2');
+    const input = presetInput('sample-1');
     return {
       name: 'سناریوی آزمایشی',
       savedAt: 1_700_000_000_000,
@@ -136,7 +261,7 @@ describe('scenario slot persistence', () => {
     assert.ok(!('D' in slots), 'unknown slot ids are dropped');
     assert.deepEqual(Object.keys(slots), ['A', 'B', 'C']);
     assert.equal(slots.A?.name, 'سناریوی آزمایشی');
-    assert.equal(slots.A?.kpis.maxHole, simulate(presetInput('sample-2'), false).kpis.maxHole);
+    assert.equal(slots.A?.kpis.maxHole, simulate(presetInput('sample-1'), false).kpis.maxHole);
   });
 
   it('clamps hostile numbers inside a saved slot', () => {
@@ -154,7 +279,7 @@ describe('scenario slot persistence', () => {
     assert.equal(s.config.interbankRate, 0);
     assert.equal(s.behavior.takeUpRate, 100);
     assert.equal(s.behavior.totalDeposit, 50_000_000_000);
-    assert.equal(s.tiers[0].tDep, 12);
+    assert.equal(s.tiers[0].tDep, 18);
     assert.equal(s.tiers[0].tLoan, 6);
     assert.equal(s.tiers[0].alpha, 100);
     assert.equal(s.tiers[0].allocation, 100);

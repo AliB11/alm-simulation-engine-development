@@ -12,6 +12,8 @@ import { computeRegulatory, DEFAULT_REGULATORY } from '../lib/regulatory';
 import App from '../App';
 import { NAV } from './Header';
 import { CashFlowTable } from './CashFlowTable';
+import { GlobalConfigPanel } from './GlobalConfigPanel';
+import { CustomerCalculator } from './CustomerCalculator';
 import { ScenarioCompare } from './ScenarioCompare';
 import { TornadoPanel } from './TornadoPanel';
 import { TierComparison } from './TierComparison';
@@ -19,8 +21,9 @@ import { MaturityLadder } from './MaturityLadder';
 import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
-import { tierColor } from '../lib/presets';
+import { PRESETS, tierColor } from '../lib/presets';
 import { fmtRaw } from '../lib/format';
+import { TIER_WAIT_MAX } from '../lib/limits';
 import { TierBuilder } from './TierBuilder';
 import { OptimizerResultTable, OptimizerSummary, resultHeadline } from './OptimizerPanel';
 import { DEFAULT_CONSTRAINTS, designTiers, optimizeDesign } from '../lib/optimizer';
@@ -57,6 +60,9 @@ suite('UI smoke — server render of every section', () => {
   test('renders the whole application without throwing or leaking NaN', () => {
     const html = render(<App />);
     assert.ok(html.length > 50_000, `unexpectedly small document: ${html.length}`);
+    assert.ok(html.includes('نمونه طرح اول · نگین امید زرین بانک سپه'), 'the new default profile should be visible');
+    assert.ok(html.includes('نمونه طرح سوم'), 'the revised third sample should remain available');
+    assert.ok(!html.includes('نمونه طرح دوم'), 'the deleted second sample must not render');
     assertNoBrokenNumbers(html, 'App');
     for (const heading of [
       'تنظیمات کلان محصول',
@@ -73,6 +79,62 @@ suite('UI smoke — server render of every section', () => {
     }
   });
 
+  test('sample one exposes the selectable Bank Sepah fee choices', () => {
+    const input = presetInput('sample-1');
+    const configHtml = render(
+      <GlobalConfigPanel
+        config={input.config}
+        rateOptions={[0, 2, 4]}
+        programCap={PRESETS.find((preset) => preset.key === 'sample-1')?.programCap}
+        onChange={() => {}}
+      />,
+    );
+    for (const choice of ['۰٪', '۲٪', '۴٪']) {
+      assert.ok(configHtml.includes(choice), `missing selectable Negin Omid Zarin fee option ${choice}`);
+    }
+    assert.ok(configHtml.includes('گزینه‌های کارمزد این الگو'));
+    assert.ok(configHtml.includes('کارمزد انتخابی'));
+    assert.ok(configHtml.includes('فرض سادهٔ سالانه'));
+    assert.ok(configHtml.includes('سقف هر متقاضی اختلاف دارند'));
+
+    const result = simulate(input, true);
+    const builderHtml = render(
+      <TierBuilder
+        tiers={input.tiers}
+        results={result.tiers}
+        config={input.config}
+        activePreset="sample-1"
+        onChange={() => {}}
+        onLoadPreset={() => {}}
+      />,
+    );
+    assert.ok(builderHtml.includes('انتظار ۱–۱۸ ماه'));
+    assert.ok(builderHtml.includes('سقف فردی'));
+    assert.ok(builderHtml.includes('سقف کل طرح'));
+    assert.ok(builderHtml.includes('اقساط ۱۲، ۲۴، ۳۶، ۴۸، ۶۰'));
+    for (const months of [12, 24, 36, 48, 60]) {
+      assert.match(
+        builderHtml,
+        new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} ماه<\\/option>`),
+        `missing editable ${months}-month sample-one term`,
+      );
+    }
+  });
+
+  test('customer calculator supports the 18-month wait and all Negin repayment options', () => {
+    const input = presetInput('sample-1');
+    const maxWaitTiers = input.tiers.filter((tier) => tier.tDep === 18);
+    const html = render(<CustomerCalculator tiers={maxWaitTiers} config={input.config} />);
+    assert.match(html, /<option value="18"[^>]*>۱۸ ماه<\/option>/, 'the 18-month waiting option must be selectable');
+    for (const months of [12, 24, 36, 48, 60]) {
+      assert.match(
+        html,
+        new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} قسط<\\/option>`),
+        `missing ${months}-month installment option`,
+      );
+    }
+  });
+
   test('sample plan three exposes every report rate in an enabled, editable rate field', () => {
     const input = presetInput('sample-3');
     const result = simulate(input, true);
@@ -86,6 +148,17 @@ suite('UI smoke — server render of every section', () => {
         onLoadPreset={() => {}}
       />,
     );
+    assert.ok(html.includes('انتظار ۲–۱۲ ماه'));
+    assert.ok(html.includes('اقساط ۱۶، ۲۴، ۳۲، ۴۰، ۴۸، ۵۶، ۶۰'));
+    assert.ok(html.includes('ضریب ۲۵٪–۲۰۰٪'));
+    assert.ok(html.includes('نرخ پله ۵٪–۲۳٪'));
+    for (const months of [16, 24, 32, 40, 48, 56, 60]) {
+      assert.match(
+        html,
+        new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} ماه<\\/option>`),
+        `missing editable ${months}-month sample-three term`,
+      );
+    }
     const rateInputs = html.match(/<input\b[^>]*aria-label="نرخ اختصاصی [^"]*"[^>]*>/g) ?? [];
     assert.equal(rateInputs.length, input.tiers.length, 'every row should have an individually labeled rate input');
     // نرخ‌ها از خودِ الگو خوانده می‌شوند، نه از یک فهرست ثابت در آزمون؛ وگرنه
@@ -111,7 +184,7 @@ suite('UI smoke — server render of every section', () => {
       const tiers = designTiers(input, levers);
       assert.ok(tiers.length === input.tiers.length, 'applying a design must not change the tier count');
       for (const t of tiers) {
-        assert.ok(t.tDep >= 1 && t.tDep <= 12, `applied waiting period out of range: ${t.tDep}`);
+        assert.ok(t.tDep >= 1 && t.tDep <= TIER_WAIT_MAX, `applied waiting period out of range: ${t.tDep}`);
         assert.ok(t.tLoan >= 6 && t.tLoan <= 60, `applied repayment term out of range: ${t.tLoan}`);
         assert.ok(t.alpha >= 0 && t.alpha <= 500, `applied alpha out of range: ${t.alpha}`);
         assert.ok(t.rateOverride === null || (t.rateOverride >= 0 && t.rateOverride <= 60), `applied rate out of range: ${t.rateOverride}`);
@@ -184,7 +257,7 @@ suite('UI smoke — server render of every section', () => {
   });
 
   test('renders the analysis panels in both currencies and both themes', () => {
-    for (const presetKey of ['sample-2', 'sample-3'] as const) {
+    for (const presetKey of ['sample-1', 'sample-3'] as const) {
       const input = presetInput(presetKey);
       const result = simulate(input, true);
       const reg = computeRegulatory(result.rows, DEFAULT_REGULATORY);
@@ -210,7 +283,7 @@ suite('UI smoke — server render of every section', () => {
   });
 
   test('shows the empty scenario slots and then compares a saved snapshot', () => {
-    const input = presetInput('sample-2');
+    const input = presetInput('sample-1');
     const result = simulate(input, true);
     const empty: ScenarioSlots = { A: null, B: null, C: null };
     const props = {
@@ -263,7 +336,7 @@ suite('UI smoke — server render of every section', () => {
   });
 
   test('renders an empty portfolio and an out-of-horizon design without breaking', () => {
-    const base = presetInput('sample-2');
+    const base = presetInput('sample-1');
     const corners: [string, ReturnType<typeof simulate>][] = [
       ['no tiers', simulate({ ...base, tiers: [] }, true)],
       ['no deposits', simulate({ ...base, behavior: { ...base.behavior, totalDeposit: 0 } }, true)],

@@ -7,7 +7,7 @@ import { presetInput } from './testUtils';
 
 describe('scenario comparison helpers', () => {
   it('describes input differences in Persian digits and contract names', () => {
-    const a = presetInput('sample-2');
+    const a = presetInput('sample-1');
     const b = presetInput('sample-3');
     const ka = simulate(a, false).kpis;
     const kb = simulate(b, false).kpis;
@@ -43,7 +43,7 @@ describe('scenario comparison helpers', () => {
   });
 
   it('reports no diffs for an identical pair', () => {
-    const input = presetInput('sample-2');
+    const input = presetInput('sample-1');
     const kpis = simulate(input, false).kpis;
     const a = snapshotSlot('A', input, kpis, 'یک');
     const b = snapshotSlot('B', input, kpis, 'دو');
@@ -53,7 +53,7 @@ describe('scenario comparison helpers', () => {
 
 describe('scenario diff coverage', () => {
   it('reports npl, liquidity, schedule and tier-pricing differences', () => {
-    const a = presetInput('sample-2');
+    const a = presetInput('sample-1');
     const b = structuredClone(a);
     b.config.initialLiquidity = 1_000_000;
     b.config.releaseReserve = true;
@@ -92,7 +92,7 @@ describe('scenario diff coverage', () => {
   });
 
   it('flags custom-vintage composition changes', () => {
-    const a = presetInput('sample-2');
+    const a = presetInput('sample-1');
     const b = structuredClone(a);
     b.schedule = {
       mode: 'custom',

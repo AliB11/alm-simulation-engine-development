@@ -10,9 +10,13 @@ import { cn } from '../utils/cn';
 interface Props {
   config: GlobalConfig;
   onChange: (patch: Partial<GlobalConfig>) => void;
+  /** اگر الگوی جاری نرخ‌های کارمزد گسسته داشته باشد، همان گزینه‌ها نمایش داده می‌شوند. */
+  rateOptions?: readonly number[];
+  /** سقف کل برنامه، جدا از سقف فردی که موتور روی مشتری اعمال می‌کند. */
+  programCap?: number;
 }
 
-export function GlobalConfigPanel({ config, onChange }: Props) {
+export function GlobalConfigPanel({ config, onChange, rateOptions, programCap }: Props) {
   const [advanced, setAdvanced] = useState(false);
   const { unit, factor } = useDisplay();
   const isQard = config.contractType === 'qard';
@@ -52,24 +56,45 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
         </Field>
 
         <Field
-          label={isQard ? 'نرخ کارمزد سالانه' : 'نرخ سود سالانه'}
+          label={isQard ? (rateOptions?.length ? 'کارمزد انتخابی' : 'نرخ کارمزد سالانه') : 'نرخ سود سالانه'}
           className="xl:col-span-2"
           info={
             isQard
-              ? 'کارمزد ساده سالانه روی اصل مبلغ وام که به صورت مساوی بین اقساط سرشکن می‌شود.'
+              ? rateOptions?.length
+                ? 'این درصد یکی از گزینه‌های اعلام‌شدهٔ طرح است؛ شبیه‌ساز برای برآورد اقساط آن را با فرض سادهٔ سالانه روی اصل وام به کار می‌برد، نه فرمول رسمیِ تأییدشدهٔ بانک.'
+                : 'کارمزد ساده سالانه روی اصل مبلغ وام که به صورت مساوی بین اقساط سرشکن می‌شود.'
               : 'نرخ سود اسمی سالانه؛ اقساط با روش استهلاک اقساط مساوی (Annuity) محاسبه می‌شوند.'
           }
-          hint={isQard ? 'r_f — پیش‌فرض بازار: ۰ تا ۴٪' : 'r — نرخ مصوب تسهیلات عقود مبادله‌ای'}
+          hint={
+            isQard && rateOptions?.length
+              ? `گزینه‌های کارمزد این الگو: ${rateOptions.map((option) => fmtPct(option, 0)).join('، ')}`
+              : isQard
+                ? 'r_f — پیش‌فرض بازار: ۰ تا ۴٪'
+                : 'r — نرخ مصوب تسهیلات عقود مبادله‌ای'
+          }
         >
-          <NumField
-            value={rate}
-            onChange={(v) => onChange(isQard ? { qardFeeRate: v } : { murabahaRate: v })}
-            min={0}
-            max={60}
-            step={0.5}
-            decimals={2}
-            suffix="٪"
-          />
+          {isQard && rateOptions?.length && rateOptions.some((option) => option === rate) ? (
+            <Segmented
+              full
+              size="sm"
+              value={String(rate)}
+              onChange={(value) => onChange({ qardFeeRate: Number(value) })}
+              options={rateOptions.map((option) => ({
+                value: String(option),
+                label: fmtPct(option, 0),
+              }))}
+            />
+          ) : (
+            <NumField
+              value={rate}
+              onChange={(v) => onChange(isQard ? { qardFeeRate: v } : { murabahaRate: v })}
+              min={0}
+              max={60}
+              step={0.5}
+              decimals={2}
+              suffix="٪"
+            />
+          )}
         </Field>
 
         <Field
@@ -92,7 +117,11 @@ export function GlobalConfigPanel({ config, onChange }: Props) {
         <Field
           label="سقف فردی اعطای تسهیلات"
           className="xl:col-span-2"
-          info="سقف وام قابل پرداخت به هر فرد. ضریب مؤثر هر پله = min(α ، سقف ÷ مانده مبنا). مقدار صفر یعنی بدون سقف."
+          info={
+            programCap
+              ? `این سقف فردیِ مدل است؛ سقف کل اعلامی محصول تا ${fmtCompact(programCap * factor)} ${unit} است، اما منابع درباره سقف هر متقاضی اختلاف دارند. این الگو به‌طور پیش‌فرض ۳۰۰ میلیون تومان را به‌صورت محافظه‌کارانه اعمال می‌کند.`
+              : 'سقف وام قابل پرداخت به هر فرد. ضریب مؤثر هر پله = min(α ، سقف ÷ مانده مبنا). مقدار صفر یعنی بدون سقف.'
+          }
           hint={config.loanCap > 0 ? `${fmtCompact(config.loanCap * factor)} ${unit}` : 'بدون سقف (۰)'}
         >
           <NumField money value={config.loanCap} onChange={(v) => onChange({ loanCap: v })} min={0} max={IMPORT_MONEY_MAX} suffix={unit} />

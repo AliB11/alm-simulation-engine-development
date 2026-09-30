@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash } from 'lucide-react';
 import type { GlobalConfig, Tier, TierResult } from '../types';
 import { PRESETS, tierColor, tierLabel, uid } from '../lib/presets';
-import { IMPORT_MONEY_MAX, TIER_ALPHA_MAX } from '../lib/limits';
+import { IMPORT_MONEY_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from '../lib/limits';
 import { globalRate } from '../lib/engine';
 import { fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
@@ -21,6 +21,19 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
   const { unit } = useDisplay();
   const allocSum = tiers.reduce((s, t) => s + Math.max(0, t.allocation || 0), 0);
   const allocOk = Math.abs(allocSum - 100) < 0.05;
+  const activePresetDetails = PRESETS.find((preset) => preset.key === activePreset);
+  const waitMin = activePresetDetails?.waitingRange?.[0] ?? TIER_WAIT_MIN;
+  const waitMax = activePresetDetails?.waitingRange?.[1] ?? TIER_WAIT_MAX;
+  const repaymentMin = activePresetDetails?.repaymentTerms
+    ? Math.min(...activePresetDetails.repaymentTerms)
+    : 6;
+  const repaymentMax = activePresetDetails?.repaymentTerms
+    ? Math.max(...activePresetDetails.repaymentTerms)
+    : 60;
+  const alphaMin = activePresetDetails?.alphaRange?.[0] ?? 0;
+  const alphaMax = activePresetDetails?.alphaRange?.[1] ?? TIER_ALPHA_MAX;
+  const rateMin = activePresetDetails?.tierRateRange?.[0] ?? 0;
+  const rateMax = activePresetDetails?.tierRateRange?.[1] ?? (activePresetDetails?.rateOptions?.at(-1) ?? 60);
   const gRate = globalRate(config);
   const resultById = new Map(results.map((r) => [r.tier.id, r]));
 
@@ -96,9 +109,10 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
       />
 
       {/* Presets */}
-      <div className="grid gap-3 p-5 pb-2 md:grid-cols-3">
+      <div className="grid gap-3 p-5 pb-2 md:grid-cols-2">
         {PRESETS.map((p) => {
           const active = activePreset === p.key;
+          const displayedRate = active ? (p.contractType === 'qard' ? config.qardFeeRate : config.murabahaRate) : p.rate;
           return (
             <button
               key={p.key}
@@ -121,10 +135,32 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
               <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-slate-500 dark:text-slate-400">{p.description}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Badge tone={p.contractType === 'qard' ? 'emerald' : 'amber'}>
-                  {p.contractType === 'qard' ? 'قرض‌الحسنه' : 'مرابحه'} {fmtPct(p.rate, 1)}
+                  {p.contractType === 'qard' ? 'قرض‌الحسنه' : 'مرابحه'} {fmtPct(displayedRate, 1)}
                 </Badge>
                 <Badge>{toFa(p.tiers.length)} حالت</Badge>
-                <Badge>سقف {fmtNumber(p.loanCap / 1e6)} میلیون</Badge>
+                <Badge>سقف فردی {fmtNumber(p.loanCap / 1e6)} میلیون</Badge>
+                {p.programCap && <Badge>سقف کل طرح {fmtNumber(p.programCap / 1e6)} میلیون</Badge>}
+                {p.waitingRange && (
+                  <Badge>
+                    انتظار {toFa(p.waitingRange[0])}–{toFa(p.waitingRange[1])} ماه
+                  </Badge>
+                )}
+                {p.repaymentTerms && (
+                  <Badge>اقساط {p.repaymentTerms.map((months) => toFa(months)).join('، ')}</Badge>
+                )}
+                {p.alphaRange && (
+                  <Badge>
+                    ضریب {fmtPct(p.alphaRange[0], 1)}–{fmtPct(p.alphaRange[1], 1)}
+                  </Badge>
+                )}
+                {p.tierRateRange && (
+                  <Badge>
+                    نرخ پله {fmtPct(p.tierRateRange[0], 1)}–{fmtPct(p.tierRateRange[1], 1)}
+                  </Badge>
+                )}
+                {p.rateOptions && (
+                  <Badge>کارمزد {p.rateOptions.map((rate) => fmtPct(rate, 0)).join(' / ')}</Badge>
+                )}
                 {active && <Badge tone="indigo">فعال</Badge>}
               </div>
             </button>
@@ -193,8 +229,8 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                     <NumField
                       size="sm"
                       value={t.tDep}
-                      min={1}
-                      max={12}
+                      min={waitMin}
+                      max={waitMax}
                       onChange={(v) => update(t.id, { tDep: Math.round(v) })}
                       suffix="ماه"
                       className="w-[92px]"
@@ -202,23 +238,38 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                     />
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
-                    <NumField
-                      size="sm"
-                      value={t.tLoan}
-                      min={6}
-                      max={60}
-                      onChange={(v) => update(t.id, { tLoan: Math.round(v) })}
-                      suffix="ماه"
-                      className="w-[92px]"
-                      ariaLabel="دوره بازپرداخت"
-                    />
+                    {activePresetDetails?.repaymentTerms ? (
+                      <select
+                        value={String(t.tLoan)}
+                        onChange={(event) => update(t.id, { tLoan: Number(event.target.value) })}
+                        aria-label={`دوره بازپرداخت ${tierLabel(i)}`}
+                        className="h-8 w-[92px] rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-200"
+                      >
+                        {activePresetDetails.repaymentTerms.map((months) => (
+                          <option key={months} value={months}>
+                            {toFa(months)} ماه
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <NumField
+                        size="sm"
+                        value={t.tLoan}
+                        min={repaymentMin}
+                        max={repaymentMax}
+                        onChange={(v) => update(t.id, { tLoan: Math.round(v) })}
+                        suffix="ماه"
+                        className="w-[92px]"
+                        ariaLabel="دوره بازپرداخت"
+                      />
+                    )}
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
                     <NumField
                       size="sm"
                       value={t.alpha}
-                      min={0}
-                      max={TIER_ALPHA_MAX}
+                      min={alphaMin}
+                      max={alphaMax}
                       step={5}
                       decimals={1}
                       onChange={(v) => update(t.id, { alpha: v })}
@@ -265,8 +316,8 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                       size="sm"
                       value={t.rateOverride}
                       placeholder={fmtRaw(gRate, 2)}
-                      min={0}
-                      max={60}
+                      min={rateMin}
+                      max={rateMax}
                       step={0.1}
                       decimals={2}
                       onChange={(v) => update(t.id, { rateOverride: v })}
