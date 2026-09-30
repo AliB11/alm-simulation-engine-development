@@ -21,9 +21,9 @@ describe('sample plan three', () => {
   const sample = PRESETS.find((preset) => preset.key === 'sample-3');
   assert.ok(sample);
 
-  it('ships all report rates as editable tier overrides across the 12–60 month term range', () => {
+  it('ships the approved rate card as editable tier overrides across the 12–60 month term range', () => {
     assert.deepEqual(sample.tiers.map((tier) => tier.rateOverride), [
-      18, 19, 20, 21.5, 22.5, 23.5, 24.5, 25.5, 26.5, 28, 29, 30,
+      5, 9, 10, 13, 15, 16, 17, 18, 19, 20, 21, 23,
     ]);
     assert.equal(sample.tiers.length, 12);
     assert.equal(Math.min(...sample.tiers.map((tier) => tier.tLoan)), 12);
@@ -47,12 +47,12 @@ describe('sample plan three', () => {
     );
     assert.ok(rising(sample.tiers.map((tier) => tier.alpha), false), 'a longer wait must not shrink the loan multiple');
 
-    assert.equal(sample.tiers[0].tDep, 1, 'the ladder starts from the shortest waiting period');
+    assert.equal(sample.tiers[0].tDep, 3, 'the ladder starts from the shortest approved waiting period');
     assert.equal(sample.tiers[0].tLoan, 12, '…with the shortest repayment term');
-    assert.equal(sample.tiers[0].rateOverride, 18, '…and the cheapest rate');
+    assert.equal(sample.tiers[0].rateOverride, 5, '…and the cheapest rate');
     assert.equal(sample.tiers[11].tDep, 12);
     assert.equal(sample.tiers[11].tLoan, 60);
-    assert.equal(sample.tiers[11].rateOverride, 30);
+    assert.equal(sample.tiers[11].rateOverride, 23);
   });
 
   it('keeps every rate inside the range the tier builder and the JSON importer accept', () => {
@@ -72,7 +72,24 @@ describe('sample plan three', () => {
     const kpis = simulate(presetInput('sample-3'), false).kpis;
     assert.ok(kpis.recoveryMonth !== null, 'sample three must climb back above zero before the horizon ends');
     assert.ok(kpis.endCum > 0, 'sample three must end the horizon with positive cumulative liquidity');
-    assert.ok(kpis.netMargin > -8e9, 'sample three must stay within the loss band of the other two samples');
+    // این طرح با جدول نرخ مصوب (۵٪…۲۳٪) و نرخ سود سپردهٔ ۲۰.۵٪ ذاتاً زیان‌ده
+    // است: ۱۱ پله از ۱۲ پله ارزان‌تر از نرخ سپرده‌اند، پس کف زیان همان سود
+    // پرداختی به سپرده‌گذار است و هیچ چینش پله‌ای آن را عوض نمی‌کند. آستانهٔ
+    // زیر فقط از بدتر شدن نردبان نسبت به چینش قبلی (−۱۴.۷۶ میلیارد) جلوگیری
+    // می‌کند.
+    assert.ok(kpis.netMargin > -14.5e9, 'sample three must not regress below the previous ladder');
+  });
+
+  it('documents why the approved rate card cannot break even at a 20.5% deposit rate', () => {
+    const cheaperThanDeposit = sample.tiers.filter((tier) => (tier.rateOverride as number) < sample.depositProfitRate);
+    assert.equal(cheaperThanDeposit.length, 10, 'ten of twelve steps lend below the deposit rate');
+
+    const kpis = simulate(presetInput('sample-3'), false).kpis;
+    assert.ok(
+      kpis.totalProfitPaid > kpis.totalIncomeInHorizon,
+      'the deposit profit paid inside the horizon exceeds every rial the loans earn back',
+    );
+    assert.ok(kpis.netInterestIncome < 0, 'net interest income must be negative under this rate card');
   });
 });
 
