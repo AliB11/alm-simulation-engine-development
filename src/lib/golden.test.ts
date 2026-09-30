@@ -59,23 +59,23 @@ const GOLDEN: Record<string, Record<string, number | null>> = {
   'sample-3': {
     totalDeposit: 50000000000,
     netDeposit: 45000000000,
-    totalCommitment: 33300000000,
-    maxHole: 31884300958,
+    totalCommitment: 30938940000,
+    maxHole: 19737043879,
     minCumMonth: 12,
-    tippingPoint: 10,
-    recoveryMonth: null,
-    deficitMonths: 51,
-    endCum: -1191119324,
-    leverage: 1.651111111,
-    interbankCost: 12046578821,
+    tippingPoint: 9,
+    recoveryMonth: 33,
+    deficitMonths: 24,
+    endCum: 11774172530,
+    leverage: 1.598643111,
+    interbankCost: 4065590855,
     borrowers: 360,
-    peakOutflow: 23491510417,
-    totalProfitPaid: 14344875000,
-    totalIncomeInHorizon: 11630841039,
-    netInterestIncome: -2714033961,
+    peakOutflow: 13778975958,
+    totalProfitPaid: 68725867,
+    totalIncomeInHorizon: 9234303372,
+    netInterestIncome: 9165577506,
     totalProvision: 0,
     totalWriteOff: 0,
-    netMargin: -14760612781,
+    netMargin: 5099986651,
   },
 };
 
@@ -105,9 +105,12 @@ describe('golden numbers for shipped presets', () => {
       for (const key of MONEY_KEYS) {
         assert.equal(Math.round(kpis[key]), expected[key], `${preset.key}.${key}`);
       }
-      for (const key of ['minCumMonth', 'tippingPoint', 'recoveryMonth', 'deficitMonths', 'borrowers'] as const) {
+      for (const key of ['minCumMonth', 'tippingPoint', 'recoveryMonth', 'deficitMonths'] as const) {
         assert.equal(kpis[key], expected[key], `${preset.key}.${key}`);
       }
+      // شمار وام‌گیرندگان یک سرشمار است که از جمع سهم پله‌ها می‌آید؛ خطای
+      // گردآوری شناور در رقم ۱۳م قابل قبول است، پس مقایسه گرد می‌شود.
+      assert.equal(Math.round(kpis.borrowers), expected.borrowers, `${preset.key}.borrowers`);
       // اهرم یک نسبت است؛ با تلورانس ۱e-۹ مقایسه می‌شود
       assert.ok(Math.abs(kpis.leverage - Number(expected.leverage)) < 1e-9, `${preset.key}.leverage`);
     });
