@@ -20,8 +20,10 @@ import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
 import { tierColor } from '../lib/presets';
-import { toFa } from '../lib/format';
+import { fmtRaw } from '../lib/format';
 import { TierBuilder } from './TierBuilder';
+import { OptimizerResultTable, OptimizerSummary, resultHeadline } from './OptimizerPanel';
+import { DEFAULT_CONSTRAINTS, designTiers, optimizeDesign } from '../lib/optimizer';
 
 /**
  * آزمون دود (smoke) رابط کاربری.
@@ -85,12 +87,89 @@ suite('UI smoke — server render of every section', () => {
       />,
     );
     const rateInputs = html.match(/<input\b[^>]*aria-label="نرخ اختصاصی [^"]*"[^>]*>/g) ?? [];
-    assert.equal(rateInputs.length, 12, 'all 12 rows should have an individually labeled rate input');
-    for (const rate of [5, 9, 10, 13, 15, 16, 17, 18, 19, 20, 21, 23]) {
-      const field = rateInputs.find((tag) => tag.includes(`value="${toFa(rate)}"`));
-      assert.ok(field, `missing editable rate ${rate}%`);
+    assert.equal(rateInputs.length, input.tiers.length, 'every row should have an individually labeled rate input');
+    // نرخ‌ها از خودِ الگو خوانده می‌شوند، نه از یک فهرست ثابت در آزمون؛ وگرنه
+    // هر بازطراحی الگو این آزمون را بی‌دلیل می‌شکست.
+    const rates = input.tiers.map((tier) => tier.rateOverride as number);
+    assert.equal(new Set(rates).size, rates.length, 'the sample plan must give each mode its own rate');
+    for (const rate of rates) {
+      // فیلد نرخ با `fmtRaw(v, 2)` نوشته می‌شود؛ ممیز فارسی هم included است
+      const expected = `value="${fmtRaw(rate, 2)}"`;
+      const field = rateInputs.find((tag) => tag.includes(expected));
+      assert.ok(field, `missing editable rate ${rate}% (looked for ${expected})`);
       assert.ok(!field.includes('disabled'), `rate ${rate}% should not be locked`);
     }
+  });
+
+  test('the optimizer result views label a feasible optimum and an infeasible fallback differently', () => {
+    /* رگرسیون: پیش‌تر وقتی هیچ طرحی موجه نبود، کارت همچنان عنوان «طرح بهینهٔ
+       پیشنهادی» داشت و ستون شدت نقض هم وجود نداشت، پس کاربر نمی‌توانست بفهمد
+       پیشنهاد موتور چقدر از قیدها فاصله دارد. */
+    const input = presetInput('sample-3');
+    const applied: string[] = [];
+    const onApplyLevers = (levers: Parameters<typeof designTiers>[1], label: string) => {
+      const tiers = designTiers(input, levers);
+      assert.ok(tiers.length === input.tiers.length, 'applying a design must not change the tier count');
+      for (const t of tiers) {
+        assert.ok(t.tDep >= 1 && t.tDep <= 12, `applied waiting period out of range: ${t.tDep}`);
+        assert.ok(t.tLoan >= 6 && t.tLoan <= 60, `applied repayment term out of range: ${t.tLoan}`);
+        assert.ok(t.alpha >= 0 && t.alpha <= 500, `applied alpha out of range: ${t.alpha}`);
+        assert.ok(t.rateOverride === null || (t.rateOverride >= 0 && t.rateOverride <= 60), `applied rate out of range: ${t.rateOverride}`);
+      }
+      applied.push(label);
+    };
+
+    const feasible = optimizeDesign(input, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3, topN: 6 });
+    assert.ok(feasible.anyFeasible, 'the shipped defaults must admit a feasible design');
+    assert.equal(resultHeadline(feasible), 'طرح بهینهٔ پیشنهادی');
+
+    const impossible = optimizeDesign(input, {
+      objective: 'margin',
+      constraints: { ...DEFAULT_CONSTRAINTS, maxHolePct: 0.001 },
+      passes: 2,
+      topN: 6,
+    });
+    assert.equal(impossible.anyFeasible, false);
+    assert.equal(resultHeadline(impossible), 'کم‌نقض‌ترین طرح یافت‌شده');
+
+    for (const [label, res] of [
+      ['feasible', feasible],
+      ['infeasible', impossible],
+    ] as const) {
+      const html = render(
+        <>
+          <OptimizerSummary result={res} stale={false} onApplyLevers={onApplyLevers} />
+          <OptimizerResultTable result={res} objective="margin" stale={false} onApplyLevers={onApplyLevers} />
+        </>,
+      );
+      assert.ok(html.includes(resultHeadline(res)), `${label}: the headline is not rendered`);
+      assert.ok(html.includes('شدت نقض'), `${label}: the severity column header is missing`);
+
+      const rows = html.match(/<tr\b[^>]*>/g) ?? [];
+      assert.equal(rows.length - 1, res.candidates.length, `${label}: one table row per candidate`);
+
+      const badges = html.includes('موجه') ? 'feasible' : 'infeasible';
+      if (label === 'feasible') {
+        assert.equal(badges, 'feasible');
+        // هر ردیف موجه باید ستون شدت نقض خالی (خط تیره) داشته باشد
+        assert.ok(html.includes('>—<'), 'feasible rows must show an empty severity cell');
+      } else {
+        assert.ok(html.includes('نقض</'), 'infeasible rows must carry a violation badge');
+        assert.ok(res.candidates.every((c) => !c.feasible));
+        for (let i = 1; i < res.candidates.length; i++) {
+          assert.ok(
+            res.candidates[i - 1].severity <= res.candidates[i].severity + 1e-12,
+            'the ranked list must be ordered by rising violation severity',
+          );
+        }
+      }
+
+      // هیچ طراحی تکراری در فهرست نامزدها
+      const fps = res.candidates.map((c) => c.fingerprint);
+      assert.equal(new Set(fps).size, fps.length, `${label}: duplicate design in the candidate list`);
+      assertNoBrokenNumbers(html, `OptimizerPanel/${label}`);
+    }
+    assert.equal(applied.length, 0, 'rendering must not apply a design on its own');
   });
 
   test('every navigation link points at a section that actually exists', () => {
