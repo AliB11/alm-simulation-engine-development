@@ -152,7 +152,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
               <th className={th}>
                 <span className="inline-flex items-center gap-1">
                   نرخ اختصاصی
-                  <InfoTip text="در صورت خالی بودن، نرخ سراسری کارمزد/سود استفاده می‌شود." />
+                  <InfoTip text="نرخ اختصاصی این حالت را مستقیم ویرایش کنید؛ خالی‌کردن فیلد، نرخ ثبت‌شده را پاک نمی‌کند." />
                 </span>
               </th>
               <th className={th}>
@@ -267,12 +267,12 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                       placeholder={fmtRaw(gRate, 2)}
                       min={0}
                       max={60}
+                      step={0.1}
                       decimals={2}
                       onChange={(v) => update(t.id, { rateOverride: v })}
-                      onClear={() => update(t.id, { rateOverride: null })}
                       suffix="٪"
                       className="w-[92px]"
-                      ariaLabel="نرخ اختصاصی"
+                      ariaLabel={`نرخ اختصاصی ${tierLabel(i)}`}
                     />
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
