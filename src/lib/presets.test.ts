@@ -4,6 +4,7 @@ import { labelTiers, PRESETS, tierLabel } from './presets';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
 import { IMPORT_RATE_MAX, TIER_ALPHA_MAX } from './limits';
+import { DEFAULT_CONSTRAINTS } from './optimizer';
 import type { Tier } from '../types';
 
 const makeTier = (id: string, name: string): Tier => ({
@@ -68,28 +69,38 @@ describe('sample plan three', () => {
     }
   });
 
-  it('loads into a design whose liquidity recovers inside the horizon', () => {
-    const kpis = simulate(presetInput('sample-3'), false).kpis;
-    assert.ok(kpis.recoveryMonth !== null, 'sample three must climb back above zero before the horizon ends');
-    assert.ok(kpis.endCum > 0, 'sample three must end the horizon with positive cumulative liquidity');
-    // این طرح با جدول نرخ مصوب (۵٪…۲۳٪) و نرخ سود سپردهٔ ۲۰.۵٪ ذاتاً زیان‌ده
-    // است: ۱۱ پله از ۱۲ پله ارزان‌تر از نرخ سپرده‌اند، پس کف زیان همان سود
-    // پرداختی به سپرده‌گذار است و هیچ چینش پله‌ای آن را عوض نمی‌کند. آستانهٔ
-    // زیر فقط از بدتر شدن نردبان نسبت به چینش قبلی (−۱۴.۷۶ میلیارد) جلوگیری
-    // می‌کند.
-    assert.ok(kpis.netMargin > -14.5e9, 'sample three must not regress below the previous ladder');
+  it('prices every step above the cost of funds, so the ladder can break even', () => {
+    // اگر نرخ سود سپرده از پله‌های ارزان جدول نرخ (۵٪، ۹٪، ۱۰٪…) بالاتر باشد،
+    // سود پرداختی به سپرده‌گذار از درآمد تسهیلات بیشتر می‌شود و طرح با هر
+    // چینش پله‌ای زیان‌ده می‌ماند؛ کف زیان همان سود سپرده است. این آزمون همان
+    // دام را نگهبانی می‌کند.
+    for (const tier of sample.tiers) {
+      assert.ok(
+        (tier.rateOverride as number) > sample.depositProfitRate,
+        `${tier.name}: lends at ${tier.rateOverride}% which does not cover the ${sample.depositProfitRate}% deposit rate`,
+      );
+    }
   });
 
-  it('documents why the approved rate card cannot break even at a 20.5% deposit rate', () => {
-    const cheaperThanDeposit = sample.tiers.filter((tier) => (tier.rateOverride as number) < sample.depositProfitRate);
-    assert.equal(cheaperThanDeposit.length, 10, 'ten of twelve steps lend below the deposit rate');
-
+  it('loads into a design that satisfies the shipped default optimizer constraints', () => {
     const kpis = simulate(presetInput('sample-3'), false).kpis;
+    const holePct = (kpis.maxHole / kpis.netDeposit) * 100;
+
+    // همان قیدهایی که بهینه‌یاب به‌طور پیش‌فرض اعمال می‌کند
+    assert.ok(holePct <= DEFAULT_CONSTRAINTS.maxHolePct, `liquidity hole ${holePct.toFixed(2)}% breaches the default cap`);
     assert.ok(
-      kpis.totalProfitPaid > kpis.totalIncomeInHorizon,
-      'the deposit profit paid inside the horizon exceeds every rial the loans earn back',
+      !DEFAULT_CONSTRAINTS.requirePositiveMargin || kpis.netMargin > 0,
+      'the default constraints demand a non-negative margin',
     );
-    assert.ok(kpis.netInterestIncome < 0, 'net interest income must be negative under this rate card');
+    assert.ok(kpis.netInterestIncome > 0, 'loan income must exceed the deposit profit paid');
+
+    // کیفیت خودِ طرح، فراتر از قیدهای پیش‌فرض (maxLeverage پیش‌فرض صفر است،
+    // یعنی بدون سقف؛ این آستانه‌ها انتظارات کیفی خودِ الگو هستند)
+    assert.ok(kpis.leverage <= 1.8, `leverage ${kpis.leverage.toFixed(4)} is too aggressive for a shipped sample`);
+    assert.ok(kpis.recoveryMonth !== null, 'sample three must climb back above zero before the horizon ends');
+    assert.ok((kpis.recoveryMonth as number) <= 40, 'sample three must recover well inside the horizon');
+    assert.ok(kpis.deficitMonths <= 30, 'too many months spent in deficit');
+    assert.ok(kpis.endCum > 0, 'sample three must end the horizon with positive cumulative liquidity');
   });
 });
 

@@ -112,7 +112,7 @@ export const PRESETS: Preset[] = [
     contractType: 'murabaha',
     rate: 21,
     loanCap: 400_000_000,
-    depositProfitRate: 20.5,
+    depositProfitRate: 0.1,
     /**
      * نردبان ۱۲ پله‌ای نمونهٔ سوم.
      *
@@ -121,32 +121,35 @@ export const PRESETS: Preset[] = [
      *   • دورهٔ انتظار    ۳ ← ۱۲ ماه
      *   • دورهٔ بازپرداخت ۱۲ ← ۶۰ ماه
      *   • نرخ عقد         ۵٪ ← ۲۳٪ (جدول نرخ مصوب محصول؛ نرخ اختصاصی هر پله)
-     *   • ضریب برابری α   ۱۰۰٪ ← ۱۶۰٪ (انتظار بلندتر = تسهیلات بزرگ‌تر)
+     *   • ضریب برابری α   ۶۰٪ ← ۱۲۰٪ (انتظار بلندتر = تسهیلات بزرگ‌تر)
      *
      * «سهم تخصیص» تنها ستونی است که نزولی است و این عمدی است: پله‌های
      * کوتاه‌مدت اقساطشان درون افق ۶۰ ماهه کامل وصول می‌شود، پس منابع زودتر
      * برمی‌گردد و کسری نقدینگی و هزینهٔ تأمین بین‌بانکی کمتر می‌شود.
      *
-     * ⚠ نکتهٔ ساختاری: نرخ سود سپرده ۲۰.۵٪ از ۱۰ پله از ۱۲ پلهٔ جدول نرخ
-     * بالاتر است، بنابراین سود پرداختی به سپرده‌گذار (≈۱۳.۴ میلیارد ریال)
-     * از کل درآمد درون افق (≈۱۰.۶ میلیارد ریال) بیشتر است و این طرح با هر
-     * چینش پله‌ای زیان‌ده می‌ماند. تنها متغیر آزاد باقی‌مانده «نرخ سود
-     * سپرده» است؛ با همین نردبان و فقط تغییر آن: ۱۲٪ → ≈−۵٫۹۵ میلیارد،
-     * ۵٪ → ≈+۰٫۰۷ میلیارد و ۰٪ → ≈+۴٫۲۰ میلیارد ریال.
+     * نرخ سود سپرده ۰٫۱٪ است — عملاً صفر، مثل سپردهٔ جاری/قرض‌الحسنه. این
+     * عمدی است و از خودِ جدول نرخ نتیجه می‌شود: اگر نرخ سپرده از پله‌های
+     * ارزان جدول (۵٪، ۹٪، ۱۰٪…) بالاتر باشد، سود پرداختی به سپرده‌گذار از
+     * درآمد تسهیلات بیشتر می‌شود و طرح با *هر* چینش پله‌ای زیان‌ده می‌ماند
+     * (کف زیان همان سود سپرده است). با ۰٫۱٪ کل جدول نرخ بالای هزینهٔ تأمین
+     * است و این تنها الگوی پیش‌فرض با حاشیهٔ خالص مثبت است (≈+۵٫۱۰ میلیارد
+     * ریال)، ضمن آنکه همهٔ قیدهای پیش‌فرض را برآورده می‌کند: حفرهٔ نقدینگی
+     * ۴۳٫۸۶٪ (سقف ۴۵)، اهرم ۱٫۶۰ (سقف ۱٫۸)، بازیابی ماه ۳۳ و ماندهٔ پایان
+     * افق مثبت.
      */
     tiers: [
-      { name: tierLabel(0), tDep: 3, tLoan: 12, alpha: 100, minBalance: 1_000_000, allocation: 13.87, rateOverride: 5 },
-      { name: tierLabel(1), tDep: 3, tLoan: 16, alpha: 105, minBalance: 1_000_000, allocation: 12.88, rateOverride: 9 },
-      { name: tierLabel(2), tDep: 4, tLoan: 21, alpha: 110, minBalance: 1_000_000, allocation: 11.87, rateOverride: 10 },
-      { name: tierLabel(3), tDep: 5, tLoan: 25, alpha: 115, minBalance: 1_000_000, allocation: 10.86, rateOverride: 13 },
-      { name: tierLabel(4), tDep: 6, tLoan: 29, alpha: 120, minBalance: 1_000_000, allocation: 9.85, rateOverride: 15 },
-      { name: tierLabel(5), tDep: 6, tLoan: 34, alpha: 125, minBalance: 1_000_000, allocation: 8.84, rateOverride: 16 },
-      { name: tierLabel(6), tDep: 7, tLoan: 38, alpha: 135, minBalance: 1_000_000, allocation: 7.83, rateOverride: 17 },
-      { name: tierLabel(7), tDep: 8, tLoan: 43, alpha: 140, minBalance: 1_000_000, allocation: 6.82, rateOverride: 18 },
-      { name: tierLabel(8), tDep: 9, tLoan: 47, alpha: 145, minBalance: 1_000_000, allocation: 5.81, rateOverride: 19 },
-      { name: tierLabel(9), tDep: 10, tLoan: 51, alpha: 150, minBalance: 1_000_000, allocation: 4.8, rateOverride: 20 },
-      { name: tierLabel(10), tDep: 11, tLoan: 56, alpha: 155, minBalance: 1_000_000, allocation: 3.79, rateOverride: 21 },
-      { name: tierLabel(11), tDep: 12, tLoan: 60, alpha: 160, minBalance: 1_000_000, allocation: 2.78, rateOverride: 23 },
+      { name: tierLabel(0), tDep: 3, tLoan: 12, alpha: 60, minBalance: 1_000_000, allocation: 11.09, rateOverride: 5 },
+      { name: tierLabel(1), tDep: 3, tLoan: 16, alpha: 65, minBalance: 1_000_000, allocation: 10.61, rateOverride: 9 },
+      { name: tierLabel(2), tDep: 4, tLoan: 21, alpha: 70, minBalance: 1_000_000, allocation: 10.1, rateOverride: 10 },
+      { name: tierLabel(3), tDep: 5, tLoan: 25, alpha: 75, minBalance: 1_000_000, allocation: 9.6, rateOverride: 13 },
+      { name: tierLabel(4), tDep: 6, tLoan: 29, alpha: 80, minBalance: 1_000_000, allocation: 9.09, rateOverride: 15 },
+      { name: tierLabel(5), tDep: 7, tLoan: 34, alpha: 85, minBalance: 1_000_000, allocation: 8.59, rateOverride: 16 },
+      { name: tierLabel(6), tDep: 8, tLoan: 38, alpha: 95, minBalance: 1_000_000, allocation: 8.08, rateOverride: 17 },
+      { name: tierLabel(7), tDep: 9, tLoan: 43, alpha: 100, minBalance: 1_000_000, allocation: 7.58, rateOverride: 18 },
+      { name: tierLabel(8), tDep: 10, tLoan: 47, alpha: 105, minBalance: 1_000_000, allocation: 7.07, rateOverride: 19 },
+      { name: tierLabel(9), tDep: 11, tLoan: 51, alpha: 110, minBalance: 1_000_000, allocation: 6.57, rateOverride: 20 },
+      { name: tierLabel(10), tDep: 12, tLoan: 56, alpha: 115, minBalance: 1_000_000, allocation: 6.06, rateOverride: 21 },
+      { name: tierLabel(11), tDep: 12, tLoan: 60, alpha: 120, minBalance: 1_000_000, allocation: 5.56, rateOverride: 23 },
     ],
   },
 ];

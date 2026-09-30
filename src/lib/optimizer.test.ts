@@ -274,15 +274,37 @@ describe('design optimizer — objective, constraints and search', () => {
     }
   });
 
-  it('can reach a profitable design on a plan whose rate card sits below the deposit rate', () => {
+  it('can reach a profitable design when most of the rate card sits below the deposit rate', () => {
     // رگرسیون: پیش‌تر «نرخ عقد» جزو اهرم‌های جست‌وجو نبود، پس روی الگوی مرابحه
     // هیچ ترکیبی از α و دوره‌ها نمی‌توانست طرح را سودآور کند.
-    const murabaha = presetInput('sample-3');
-    assert.ok(simulate(murabaha, false).kpis.netMargin < 0, 'the shipped sample three is loss-making at face value');
-    const res = optimizeDesign(murabaha, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
+    //
+    // خودِ نمونهٔ سوم دیگر این شرایط را ندارد (نرخ سود سپرده‌اش ۰٫۱٪ شد)، پس
+    // فیکسچر «زیر آب» را خودِ آزمون می‌سازد تا به یک الگوی پیش‌فرض وابسته
+    // نماند. با نرخ سپردهٔ ۲۰٫۵٪ ده پله از دوازده پله ارزان‌تر از تأمین‌اند.
+    const base = presetInput('sample-3');
+    const underwater = { ...base, config: { ...base.config, depositProfitRate: 20.5 } };
+    const cheaper = underwater.tiers.filter((t) => (t.rateOverride as number) < 20.5).length;
+    assert.equal(cheaper, 10, 'ten of twelve steps must lend below the deposit rate');
+    assert.ok(simulate(underwater, false).kpis.netMargin < 0, 'the fixture must start loss-making at face value');
+
+    const res = optimizeDesign(underwater, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
     assert.ok(res.best.feasible);
     assert.ok(res.best.kpis.netMargin > 0, `the rate lever must be able to turn the plan profitable (got ${res.best.kpis.netMargin})`);
     assert.ok(Math.abs(res.best.levers.rateShift) > 0, 'the winning design must actually move the rate');
+  });
+
+  it('reports infeasibility honestly when every step lends below the deposit rate', () => {
+    // مکمل آزمون بالا: اهرم نرخ در ۶۰٪ مهار می‌شود، پس وقتی کل جدول نرخ زیر
+    // نرخ سپرده باشد هیچ طرحی سودآور نمی‌شود و بهینه‌یاب نباید وانمود کند که
+    // طرح بهینه پیدا کرده است.
+    const base = presetInput('sample-3');
+    const hopeless = { ...base, config: { ...base.config, depositProfitRate: 40 } };
+    assert.ok(hopeless.tiers.every((t) => (t.rateOverride as number) < 40), 'every step must be underwater');
+
+    const res = optimizeDesign(hopeless, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
+    assert.equal(res.anyFeasible, false, 'no design can satisfy requirePositiveMargin here');
+    assert.equal(res.best.feasible, false);
+    assert.ok(res.best.kpis.netMargin < 0, 'the least-violating design is still loss-making');
   });
 
   it('collapses lever combinations that land on the same tiers into one candidate', () => {

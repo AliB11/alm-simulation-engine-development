@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { configDiffs, KPI_ROWS, snapshotSlot, SLOT_META } from './scenarios';
+import { fmtNumber, toFa } from './format';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
 
@@ -14,7 +15,14 @@ describe('scenario comparison helpers', () => {
     const slotB = snapshotSlot('B', b, kb, 'جایگزین');
     const diffs = configDiffs(slotA, slotB);
 
-    assert.ok(diffs.some((d) => d.startsWith('سود سپرده:') && d.includes('۰') && d.includes('۲۰')));
+    // مقادیر از خودِ ورودی گرفته می‌شوند تا تغییر نرخ سود سپردهٔ یک الگو این
+    // آزمون را نشکند؛ آنچه اینجا واقعاً بررسی می‌شود قالب فارسی است.
+    const depLine = diffs.find((d) => d.startsWith('سود سپرده:'));
+    assert.ok(depLine, 'the deposit-rate difference must be listed');
+    // همان قالبی که configDiffs استفاده می‌کند: fmtNumber(…, 1, true) بعد toFa
+    const render = (v: number) => toFa(fmtNumber(v, 1, true));
+    assert.ok(depLine.includes(render(a.config.depositProfitRate)), `diff must show the source rate: ${depLine}`);
+    assert.ok(depLine.includes(render(b.config.depositProfitRate)), `diff must show the target rate: ${depLine}`);
     assert.ok(diffs.some((d) => d.includes('قرض‌الحسنه') && d.includes('مرابحه')));
     assert.ok(diffs.every((d) => !d.includes('qard') && !d.includes('murabaha')));
     assert.ok(diffs.every((d) => !/\d/.test(d)), 'diffs must not leak Latin digits');
