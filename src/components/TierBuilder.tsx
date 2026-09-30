@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash } from 'lucide-react';
 import type { GlobalConfig, Tier, TierResult } from '../types';
 import { PRESETS, tierColor, tierLabel, uid } from '../lib/presets';
-import { IMPORT_MONEY_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from '../lib/limits';
+import { IMPORT_MONEY_MAX, TIER_ALPHA_MAX, TIER_ALPHA_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN } from '../lib/limits';
 import { globalRate } from '../lib/engine';
 import { fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
@@ -30,7 +30,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
   const repaymentMax = activePresetDetails?.repaymentTerms
     ? Math.max(...activePresetDetails.repaymentTerms)
     : 60;
-  const alphaMin = activePresetDetails?.alphaRange?.[0] ?? 0;
+  const alphaMin = activePresetDetails?.alphaRange?.[0] ?? TIER_ALPHA_MIN;
   const alphaMax = activePresetDetails?.alphaRange?.[1] ?? TIER_ALPHA_MAX;
   const rateMin = activePresetDetails?.tierRateRange?.[0] ?? 0;
   const rateMax = activePresetDetails?.tierRateRange?.[1] ?? (activePresetDetails?.rateOptions?.at(-1) ?? 60);
@@ -312,19 +312,37 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                     </div>
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
-                    <NumField
-                      size="sm"
-                      value={t.rateOverride}
-                      placeholder={fmtRaw(gRate, 2)}
-                      min={rateMin}
-                      max={rateMax}
-                      step={0.1}
-                      decimals={2}
-                      onChange={(v) => update(t.id, { rateOverride: v })}
-                      suffix="٪"
-                      className="w-[92px]"
-                      ariaLabel={`نرخ اختصاصی ${tierLabel(i)}`}
-                    />
+                    {activePresetDetails?.rateOptions ? (
+                      <select
+                        value={t.rateOverride === null ? '' : String(t.rateOverride)}
+                        onChange={(event) =>
+                          update(t.id, { rateOverride: event.target.value === '' ? null : Number(event.target.value) })
+                        }
+                        aria-label={`نرخ اختصاصی ${tierLabel(i)}`}
+                        className="h-8 w-[112px] rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-200"
+                      >
+                        <option value="">سراسری ({fmtPct(gRate, 0)})</option>
+                        {activePresetDetails.rateOptions.map((rate) => (
+                          <option key={rate} value={rate}>
+                            {fmtPct(rate, 0)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <NumField
+                        size="sm"
+                        value={t.rateOverride}
+                        placeholder={fmtRaw(gRate, 2)}
+                        min={rateMin}
+                        max={rateMax}
+                        step={0.1}
+                        decimals={2}
+                        onChange={(v) => update(t.id, { rateOverride: v })}
+                        suffix="٪"
+                        className="w-[92px]"
+                        ariaLabel={`نرخ اختصاصی ${tierLabel(i)}`}
+                      />
+                    )}
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
                     <div className="flex flex-col items-start gap-1">

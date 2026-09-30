@@ -19,13 +19,12 @@ import {
   violationSeverity,
   violations,
 } from './optimizer';
-import { globalRate, simulate } from './engine';
+import { simulate } from './engine';
 import { PRESETS } from './presets';
 import { near, presetInput } from './testUtils';
 import { TIER_WAIT_MAX } from './limits';
 
 const input = presetInput('sample-1');
-const sumAlloc = (tiers: Tier[]) => tiers.reduce((s, t) => s + t.allocation, 0);
 
 /** قرارداد رتبه‌بندی بهینه‌یاب، به شکل قابل آزمون */
 function notWorseThan(best: CandidateDesign, base: CandidateDesign): boolean {
@@ -48,9 +47,9 @@ describe('design optimizer — lever mechanics', () => {
     const scaled = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, alphaScale: 200 });
     assert.equal(scaled.length, input.tiers.length);
     scaled.forEach((t, i) => {
-      // سقف ۵۰۰ همان سقف سازندهٔ پله است؛ مقیاس ۲۰۰٪ روی α=۳۲۰ به ۵۰۰ مهار می‌شود
-      assert.ok(near(t.alpha, Math.min(500, input.tiers[i].alpha * 2)));
-      assert.ok(t.alpha <= 500);
+      // سقف ۲۲۵ همان سقف سازندهٔ پله و قواعد طرح اول است
+      assert.ok(near(t.alpha, Math.min(225, input.tiers[i].alpha * 2)));
+      assert.ok(t.alpha <= 225);
       assert.equal(t.tDep, input.tiers[i].tDep);
       assert.equal(t.tLoan, input.tiers[i].tLoan);
       assert.equal(t.allocation, input.tiers[i].allocation);
@@ -62,16 +61,14 @@ describe('design optimizer — lever mechanics', () => {
   it('never emits an alpha the tier builder cannot edit or JSON cannot re-import', () => {
     const huge = input.tiers.map((t) => ({ ...t, alpha: 400 }));
     const scaled = applyLevers(huge, { ...NEUTRAL_LEVERS, alphaScale: 200 });
-    assert.ok(scaled.every((t) => t.alpha === 500));
-    const tilted = applyLevers(huge, { ...NEUTRAL_LEVERS, alphaScale: 200, tilt: 'longWait' });
-    assert.ok(tilted.every((t) => t.alpha <= 500 && t.alpha >= 0));
+    assert.ok(scaled.every((t) => t.alpha === 225));
   });
 
   it('shifts waiting and repayment periods but clamps them into legal ranges', () => {
     const shifted = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, tDepShift: -5, tLoanShift: -100 });
     shifted.forEach((t, i) => {
       assert.equal(t.tDep, Math.max(1, input.tiers[i].tDep - 5));
-      assert.equal(t.tLoan, 6, 'repayment must clamp at the 6-month floor');
+      assert.equal(t.tLoan, 12, 'repayment must snap to the shortest valid product term');
       assert.equal(t.alpha, input.tiers[i].alpha);
     });
 
@@ -82,40 +79,16 @@ describe('design optimizer — lever mechanics', () => {
     });
   });
 
-  it('shifts the contract rate of every tier and clamps it to the importable range', () => {
-    const priced = input.tiers.map((t, i) => ({ ...t, rateOverride: i === 0 ? null : 20 + i }));
-    const up = applyLevers(priced, { ...NEUTRAL_LEVERS, rateShift: 6 }, 4);
-    // پلهٔ بدون نرخ اختصاصی، نرخ سراسری + جابه‌جایی را به‌صورت نرخ اختصاصی می‌گیرد
-    assert.equal(up[0].rateOverride, 10);
-    assert.equal(up[1].rateOverride, 27);
-
-    // جابه‌جایی صفر، «بدون نرخ اختصاصی» را بدون نرخ اختصاصی نگه می‌دارد
-    const zero = applyLevers(priced, NEUTRAL_LEVERS, 4);
-    assert.equal(zero[0].rateOverride, null);
-
-    // مهار در سقف ۶۰ — همان سقف سازندهٔ پله و ورود فایل
-    const capped = applyLevers(priced, { ...NEUTRAL_LEVERS, rateShift: 15 }, 55);
-    assert.ok(capped.every((t) => (t.rateOverride as number) <= 60 && (t.rateOverride as number) >= 0));
-    const floored = applyLevers(priced, { ...NEUTRAL_LEVERS, rateShift: -15 }, 4);
-    assert.ok(floored.every((t) => (t.rateOverride as number) >= 0));
-  });
-
-  it('reweights allocations by tilt while preserving the allocation total', () => {
-    const before = sumAlloc(input.tiers);
-    for (const tilt of ['longWait', 'shortWait'] as const) {
-      const tilted = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, tilt });
-      assert.ok(near(sumAlloc(tilted), before, 1e-9), `${tilt} must preserve the allocation total`);
-      assert.notDeepEqual(
-        tilted.map((t) => t.allocation),
-        input.tiers.map((t) => t.allocation),
-      );
-    }
-
-    const longWait = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, tilt: 'longWait' });
-    const shortWait = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, tilt: 'shortWait' });
-    // پلهٔ با بلندترین دورهٔ انتظار باید در longWait سهم بیشتری بگیرد
-    const longest = input.tiers.reduce((best, t, i) => (t.tDep > input.tiers[best].tDep ? i : best), 0);
-    assert.ok(longWait[longest].allocation > shortWait[longest].allocation);
+  it('changes only waiting, repayment and alpha while preserving pricing and allocation exactly', () => {
+    const changed = designTiers(input, { alphaScale: 75, tDepShift: 3, tLoanShift: -24 });
+    changed.forEach((tier, index) => {
+      assert.equal(tier.rateOverride, input.tiers[index].rateOverride);
+      assert.equal(tier.allocation, input.tiers[index].allocation);
+      assert.equal(tier.minBalance, input.tiers[index].minBalance);
+      assert.equal(tier.id, input.tiers[index].id);
+      assert.ok([12, 24, 36, 48, 60].includes(tier.tLoan));
+      assert.ok(tier.alpha >= 2.5 && tier.alpha <= 225);
+    });
   });
 
   it('is robust against degenerate tier data', () => {
@@ -132,18 +105,15 @@ describe('design optimizer — lever mechanics', () => {
       },
       { id: 'b', name: 'b', tDep: 3, tLoan: 12, alpha: 50, minBalance: 0, allocation: 0, rateOverride: null },
     ];
-    const levers: DesignLevers = { alphaScale: 150, tDepShift: 2, tLoanShift: -6, rateShift: 3, tilt: 'longWait' };
-    const out = applyLevers(broken, levers, 21);
+    const levers: DesignLevers = { alphaScale: 125, tDepShift: 2, tLoanShift: -12 };
+    const out = applyLevers(broken, levers);
     assert.equal(out.length, 2);
     for (const t of out) {
       assert.ok(Number.isFinite(t.tDep) && t.tDep >= 1 && t.tDep <= TIER_WAIT_MAX);
       assert.ok(Number.isFinite(t.tLoan) && t.tLoan >= 6 && t.tLoan <= 60);
-      assert.ok(Number.isFinite(t.alpha) && t.alpha >= 0);
-      assert.ok(Number.isFinite(t.allocation) && t.allocation >= 0);
-      assert.ok(t.rateOverride === null || (Number.isFinite(t.rateOverride) && t.rateOverride >= 0));
+      assert.ok(Number.isFinite(t.alpha) && t.alpha >= 2.5 && t.alpha <= 225);
     }
-    assert.equal(sumAlloc(out), 0, 'an all-zero allocation vector stays zero');
-    assert.deepEqual(applyLevers([], levers, 21), []);
+    assert.deepEqual(applyLevers([], levers), []);
   });
 
   it('applies levers to the input tiers only once (never cumulatively inside a search)', () => {
@@ -157,17 +127,6 @@ describe('design optimizer — lever mechanics', () => {
     assert.equal(next.schedule, input.schedule);
   });
 
-  it('routes the global contract rate through designTiers so a rate shift is never lost', () => {
-    const levered: DesignLevers = { ...NEUTRAL_LEVERS, rateShift: 6 };
-    const bare = applyLevers(input.tiers, levered); // بدون نرخ سراسری → همه از صفر شروع می‌کنند
-    const routed = designTiers(input, levered);
-    assert.deepEqual(routed, applyLevers(input.tiers, levered, globalRate(input.config)));
-    assert.notDeepEqual(routed, bare, 'omitting the global rate must not silently produce the same design');
-    assert.ok(routed.every((t) => (t.rateOverride as number) >= 6));
-  });
-});
-
-describe('design optimizer — objective, constraints and search', () => {
   it('reports constraint violations against the KPIs they refer to', () => {
     const kpis = simulate(input, false).kpis;
     assert.deepEqual(violations(kpis, { ...DEFAULT_CONSTRAINTS, maxHolePct: 0, requirePositiveMargin: false }), []);
@@ -275,37 +234,19 @@ describe('design optimizer — objective, constraints and search', () => {
     }
   });
 
-  it('can reach a profitable design when most of the rate card sits below the deposit rate', () => {
-    // رگرسیون: پیش‌تر «نرخ عقد» جزو اهرم‌های جست‌وجو نبود، پس روی الگوی مرابحه
-    // هیچ ترکیبی از α و دوره‌ها نمی‌توانست طرح را سودآور کند.
-    //
-    // خودِ نمونهٔ سوم دیگر این شرایط را ندارد (نرخ سود سپرده‌اش ۰٫۱٪ شد)، پس
-    // فیکسچر «زیر آب» را خودِ آزمون می‌سازد تا به یک الگوی پیش‌فرض وابسته
-    // نماند. با نرخ سپردهٔ ۲۰٫۵٪ شش پله از هفت پله ارزان‌تر از تأمین‌اند.
-    const base = presetInput('sample-3');
-    const underwater = { ...base, config: { ...base.config, depositProfitRate: 20.5 } };
-    const cheaper = underwater.tiers.filter((t) => (t.rateOverride as number) < 20.5).length;
-    assert.equal(cheaper, 6, 'six of seven steps must lend below the deposit rate');
-    assert.ok(simulate(underwater, false).kpis.netMargin < 0, 'the fixture must start loss-making at face value');
-
-    const res = optimizeDesign(underwater, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
-    assert.ok(res.best.feasible);
-    assert.ok(res.best.kpis.netMargin > 0, `the rate lever must be able to turn the plan profitable (got ${res.best.kpis.netMargin})`);
-    assert.ok(Math.abs(res.best.levers.rateShift) > 0, 'the winning design must actually move the rate');
-  });
-
   it('reports infeasibility honestly when every step lends below the deposit rate', () => {
-    // مکمل آزمون بالا: اهرم نرخ در ۶۰٪ مهار می‌شود، پس وقتی کل جدول نرخ زیر
-    // نرخ سپرده باشد هیچ طرحی سودآور نمی‌شود و بهینه‌یاب نباید وانمود کند که
-    // طرح بهینه پیدا کرده است.
+    // نرخ‌ها قفل‌اند؛ بهینه‌یاب نباید برای سودآور نشان‌دادن طرح، نرخ اختصاصی را تغییر دهد.
     const base = presetInput('sample-3');
     const hopeless = { ...base, config: { ...base.config, depositProfitRate: 40 } };
     assert.ok(hopeless.tiers.every((t) => (t.rateOverride as number) < 40), 'every step must be underwater');
 
-    const res = optimizeDesign(hopeless, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
+    const res = optimizeDesign(hopeless, { objective: 'margin', constraints: { ...DEFAULT_CONSTRAINTS, requirePositiveMargin: true }, passes: 3 });
     assert.equal(res.anyFeasible, false, 'no design can satisfy requirePositiveMargin here');
     assert.equal(res.best.feasible, false);
     assert.ok(res.best.kpis.netMargin < 0, 'the least-violating design is still loss-making');
+    const designed = designTiers(hopeless, res.best.levers);
+    assert.deepEqual(designed.map((t) => t.rateOverride), hopeless.tiers.map((t) => t.rateOverride));
+    assert.deepEqual(designed.map((t) => t.allocation), hopeless.tiers.map((t) => t.allocation));
   });
 
   it('collapses lever combinations that land on the same tiers into one candidate', () => {
@@ -347,7 +288,7 @@ describe('design optimizer — objective, constraints and search', () => {
     assert.equal(res.best.key, leverKey(res.best.levers));
     assert.equal(res.starts, MULTI_STARTS.length);
     // هر نقطهٔ شروع حداکثر ۱ + گذر × ابعاد شبکه ارزیابی تازه دارد؛ اشتراک‌گذاری استخر فقط کمش می‌کند
-    const grid = LEVER_GRID.alphaScale.length + LEVER_GRID.tDepShift.length + LEVER_GRID.tLoanShift.length + LEVER_GRID.rateShift.length + LEVER_GRID.tilt.length;
+    const grid = LEVER_GRID.alphaScale.length + LEVER_GRID.tDepShift.length + LEVER_GRID.tLoanShift.length;
     assert.ok(
       res.probes <= MULTI_STARTS.length * (1 + 3 * grid),
       'multi-start coordinate descent is bounded by starts × grid size',
@@ -360,19 +301,17 @@ describe('design optimizer — objective, constraints and search', () => {
     assert.equal(single.starts, 1);
     assert.equal(multi.starts, MULTI_STARTS.length);
     assert.ok(multi.probes >= single.probes);
-    const grid = LEVER_GRID.alphaScale.length + LEVER_GRID.tDepShift.length + LEVER_GRID.tLoanShift.length + LEVER_GRID.rateShift.length + LEVER_GRID.tilt.length;
+    const grid = LEVER_GRID.alphaScale.length + LEVER_GRID.tDepShift.length + LEVER_GRID.tLoanShift.length;
     assert.ok(single.probes <= 1 + 2 * grid, 'the legacy single-start path keeps its original evaluation bound');
     // نقطهٔ شروع اول همان طرح جاری است، پس چندشروعی حداقل به خوبی تک‌شروعی است
     assert.ok(notWorseThan(multi.best, single.best), 'multi-start must dominate single-start');
   });
 
   it('describes levers in Persian with the right signs', () => {
-    const parts = describeLevers({ alphaScale: 125, tDepShift: -2, tLoanShift: 12, rateShift: -6, tilt: 'longWait' });
+    const parts = describeLevers({ alphaScale: 125, tDepShift: -2, tLoanShift: 12 });
     assert.ok(parts.some((p) => p.includes('ضرایب برابری') && p.includes('۱٫۲۵')));
     assert.ok(parts.some((p) => p.includes('دورهٔ انتظار') && p.includes('−') && p.includes('۲')));
     assert.ok(parts.some((p) => p.includes('بازپرداخت') && p.includes('+') && p.includes('۱۲')));
-    assert.ok(parts.some((p) => p.includes('نرخ عقد') && p.includes('−') && p.includes('۶')));
-    assert.ok(parts.some((p) => p.includes('انتظار بلند')));
   });
 });
 

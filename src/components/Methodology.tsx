@@ -302,12 +302,12 @@ export function Methodology({ result, config, behavior, regulatory }: Props) {
           <Step
             letter="ط"
             title="بهینه‌یاب طراحی — جست‌وجوی مختصاتی روی اهرم‌ها"
-            desc="جست‌وجوی مختصاتی چندشروعی از طرح جاری و کران‌های هر اهرم آغاز می‌شود تا در بهینهٔ محلی گیر نکند. اهرم‌ها (مقیاس α، جابه‌جایی انتظار، جابه‌جایی بازپرداخت، کج‌کردن سهم) همیشه یک‌جا روی پله‌های جاری اعمال می‌شوند. موجه بودن بر مقدار هدف اولویت دارد."
+            desc="جست‌وجوی مختصاتی چندشروعی از طرح جاری و کران‌های هر اهرم آغاز می‌شود تا در بهینهٔ محلی گیر نکند. اهرم‌ها (مقیاس α، جابه‌جایی انتظار و جابه‌جایی بازپرداخت) روی پله‌های جاری اعمال می‌شوند؛ نرخ اختصاصی و سهم تخصیص ثابت می‌مانند. موجه بودن بر مقدار هدف اولویت دارد."
           >
             <Formula live={`baseline hole = ${m(k.maxHole)}  ·  baseline margin = ${m(k.netMargin)}  ·  leverage = ${Number.isFinite(k.leverage) ? `${fmtRatio(k.leverage)}×` : '∞'}`}>
               maximize Objective(levers) subject to the constraints you set
             </Formula>
-            <Formula>levers ∈ {'{'}α-scale, ΔT_dep, ΔT_loan, tilt{'}'} ; feasible designs outrank every infeasible one</Formula>
+            <Formula>levers ∈ {'{'}α-scale, ΔT_dep, ΔT_loan{'}'} ; feasible designs outrank every infeasible one</Formula>
           </Step>
         </div>
       )}
