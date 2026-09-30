@@ -134,7 +134,19 @@ export default function App() {
   );
 
   /* ---- handlers ---- */
-  const patchConfig = useCallback((p: Partial<GlobalConfig>) => setConfig((c) => ({ ...c, ...p })), []);
+  const patchConfig = useCallback(
+    (patch: Partial<GlobalConfig>) => {
+      const preset = PRESETS.find((item) => item.key === activePreset);
+      const changesContract = preset && patch.contractType && patch.contractType !== preset.contractType;
+      const customQardFee =
+        preset?.rateOptions &&
+        patch.qardFeeRate !== undefined &&
+        !preset.rateOptions.includes(patch.qardFeeRate);
+      if (changesContract || customQardFee) setActivePreset(null);
+      setConfig((current) => ({ ...current, ...patch }));
+    },
+    [activePreset],
+  );
   const patchBehavior = useCallback((p: Partial<Behavior>) => setBehavior((b) => ({ ...b, ...p })), []);
   const setTiers = useCallback((t: Tier[]) => {
     setTiersState(labelTiers(t));
@@ -289,7 +301,12 @@ export default function App() {
               subtitle="GLOBAL PRODUCT CONFIGURATION"
               icon={<Settings2 />}
             />
-            <GlobalConfigPanel config={config} onChange={patchConfig} />
+            <GlobalConfigPanel
+              config={config}
+              onChange={patchConfig}
+              rateOptions={PRESETS.find((preset) => preset.key === activePreset)?.rateOptions}
+              programCap={PRESETS.find((preset) => preset.key === activePreset)?.programCap}
+            />
           </section>
 
           <section>

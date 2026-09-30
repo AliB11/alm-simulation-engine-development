@@ -6,7 +6,7 @@
 
 یک وب‌اپلیکیشن تک‌صفحه‌ای (SPA) واکنش‌گرا، راست‌چین و کاملاً فارسی برای طراحی محصولات تسهیلاتی امتیازی
 (سپرده‌محور) و شبیه‌سازی بلادرنگ ریسک نقدینگی بر پایه **ماتریس جریان وجوه نقد ویژه‌محور (Cohort / Vintage Cash-Flow)**.
-تمام محاسبات به‌صورت پویا در مرورگر انجام می‌شود؛ سه الگوی عمومی صرفاً برای شروع طراحی ارائه شده‌اند و ضرایب و حدودشان قابل ویرایش است.
+تمام محاسبات به‌صورت پویا در مرورگر انجام می‌شود؛ دو الگوی قابل‌ویرایش ارائه شده‌اند: نمونهٔ اول از شرایط عمومی منتشرشدهٔ «نگین امید زرین بانک سپه» الهام گرفته و نمونهٔ سوم برای تمرین طراحی مرابحه است. سقف کل اعلامی نمونهٔ اول ۱ میلیارد تومان است، اما گزارش‌ها دربارهٔ سقف هر فرد یکسان نیستند؛ مدل به‌طور پیش‌فرض سقف محافظه‌کارانهٔ ۳۰۰ میلیون تومان را اعمال می‌کند. ضرایب، تخصیص‌ها و فرمول قسط نمونهٔ اول فرض‌های شبیه‌سازی‌اند، نه قرارداد یا محاسبه‌گر رسمی بانک.
 
 </div>
 
@@ -17,7 +17,7 @@
 - **Dynamic math engine** — rates and coefficients update live from the active configuration; sample profiles are editable starting points.
 - **Two Islamic contract types** — قرض‌الحسنه (Qard, fee-based) و مرابحه (Murabaha, profit-based).
 - **Unlimited custom tiers** — add / edit inline / duplicate / reorder / delete product tiers.
-- **3 editable sample profiles** — الگوهای عمومی، بدون نام یا وابستگی به محصول بانکی مشخص.
+- **2 editable sample profiles** — نمونهٔ اول با شرایط عمومی گزارش‌شدهٔ نگین امید زرین (قرض‌الحسنه، کارمزد ۰/۲/۴٪، انتظار ۱–۱۸ ماه، اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه و سقف کل اعلامی ۱ میلیارد تومان؛ سقف فردی گزارش‌شده محل اختلاف است و مدل ۳۰۰ میلیون را فرض می‌گیرد)؛ نمونهٔ سوم مرابحه با انتظار ۲–۱۲ ماه، اقساط ۱۶/۲۴/۳۲/۴۰/۴۸/۵۶/۶۰، ضریب ۲۵–۲۰۰٪ و نرخ ۵–۲۳٪. جزئیات پله/تخصیص در هر دو نمونه قابل‌ویرایش و آموزشی‌اند.
 - **Cohort / Vintage cash-flow matrix** — configurable horizon (12–120 months) with lump / uniform / custom deposit scheduling.
 - **Double Liquidity Drain** — simultaneous loan commitment + deposit runoff at maturity (per CBI no-blocking rule).
 - **Live risk KPIs** — tipping point, maximum liquidity hole, leverage ratio, interbank funding cost, recovery month.
@@ -34,7 +34,7 @@
   (deposit, legal reserve, installments, disbursement, withdrawal, deposit profit) with a live `NCF → CumLiq` trace.
 - **Scenario slots A / B / C** — snapshot the whole design, keep editing, and compare KPIs, config diffs and overlapping
   liquidity paths side by side; slots survive a page reload.
-- **Customer loan calculator** — enter an average deposit balance, waiting period and repayment term to estimate eligibility, loan amount, monthly payment and total repayment using the active product rules.
+- **Customer loan calculator** — enter an average deposit balance, waiting period and repayment term to estimate eligibility, loan amount, monthly payment and total repayment using the active simulation assumptions (not a bank-issued quote).
 - **Per-tier customer comparison** — the same deposit priced against every tier: loan, installment, ROI, effective annual
   rate (IRR) and the customer's real cost after the opportunity cost of waiting.
 - **Cash-flow CSV + general-ledger CSV export** — the monthly matrix, or one signed row per tier/vintage event that
@@ -52,7 +52,7 @@
 - **Methodology panel** — every formula shown with live-substituted values.
 - **Toman / Rial toggle, dark / light theme, localStorage persistence, JSON scenario import/export.**
 - **Offline Persian font** — Vazirmatn is bundled (OFL-1.1); the single-file build does not call Google Fonts.
-- **Golden-number tests + CI** — the three sample profiles are frozen to the rial, and GitHub Actions runs lint,
+- **Golden-number tests + CI** — the two shipped profiles are frozen to the rial, and GitHub Actions runs lint,
   typecheck, tests and build, plus a server-render smoke test of every section and an orphan-component guard.
 
 ---
@@ -65,6 +65,8 @@
 
 - قرض‌الحسنه: `PMT = (L / T_loan) × (1 + r_f × T_loan / 12)`
 - مرابحه: `PMT = L × r_m(1 + r_m)^T / ((1 + r_m)^T − 1)`  که در آن `r_m = r / 12`
+
+> در نمونهٔ نگین امید زرین، ۰/۲/۴٪ گزینه‌های کارمزد گزارش‌شده‌اند؛ فرمول بالا صرفاً فرض سادهٔ سالانهٔ موتور است. فرمول رسمی کارمزد و اقساط از منبع اولیه در دسترس نبود، بنابراین مبلغ قسط/کل بازپرداخت این نمونه را نباید قیمت رسمی بانک تلقی کرد.
 
 ### ب) خروج همزمان (Double Liquidity Drain) در ماه سررسید `T_dep`
 
@@ -182,7 +184,7 @@ and pull request. It then fails if the single-file build references any external
 
 | File | What it freezes |
 | ---- | --------------- |
-| `src/lib/golden.test.ts` | The KPI set of the three sample profiles, rounded to the rial |
+| `src/lib/golden.test.ts` | The KPI set of the two sample profiles, rounded to the toman |
 | `src/lib/engine.test.ts` | Amortization, drain rules, NaN hygiene, `∞` conventions, simulated P&L |
 | `src/lib/buckets.test.ts` | The shared time-bucket rule used by the ladder **and** the heat map |
 | `src/lib/tornado.test.ts` | One-at-a-time shocks stay consistent with the 2-D stress grid |
@@ -226,11 +228,11 @@ src/
 │   ├── buckets.ts             # ★ Single source of truth for time-bucket sizing
 │   ├── scenarios.ts           # Scenario slot model + KPI comparison rows
 │   ├── format.ts              # Persian-digit number/percent/money formatting & parsing
-│   ├── presets.ts             # Default config + 3 editable sample profiles
+│   ├── presets.ts             # Default config + 2 editable sample profiles
 │   ├── limits.ts              # Shared input bounds (not model coefficients)
 │   ├── eventMeta.ts           # Single source of truth for cash-flow event signs
 │   ├── io.ts                  # localStorage, matrix/ledger CSV, JSON, scenario slots
-│   ├── golden.test.ts         # Frozen KPI numbers for the three sample profiles
+│   ├── golden.test.ts         # Frozen KPI numbers for the two sample profiles
 │   └── *.test.ts              # Engine, buckets, tornado, optimizer, Monte Carlo, regulatory, imports
 └── components/
     ├── ui.tsx                 # Reusable primitives (Card, NumField, Slider, Segmented, …)
@@ -266,11 +268,11 @@ src/
 - **نرمال‌سازی تخصیص**: اگر مجموع سهم پله‌ها ۱۰۰٪ نباشد، سهم‌ها در محاسبات به‌طور خودکار نرمال می‌شوند و هشدار نمایش داده می‌شود.
 - **گزینه‌های خنثی به‌صورت پیش‌فرض**: آزادسازی سپرده قانونی (خاموش)، نرخ نکول اقساط (۰) و نرخ سود پرداختی سپرده (۰).
 - **سود پرداختی سپرده**: ماه‌شمار روی میانگین ماندهٔ ماهانه ((ابتدا + انتهای ماه) ÷ ۲) محاسبه می‌شود تا واریز و برداشت‌های
-  میانی ماه نیز به‌طور منصفانه سود بگیرند. نمونهٔ سوم نرخ ۰٫۱٪ را فعال می‌کند — عملاً صفر، ولی غیرصفر تا همین
-  ماه‌شمار میانگین مانده در هر سه نمونه تمرین شود؛ دو نمونهٔ قرض‌الحسنه بدون سود (۰٪) هستند.
+  میانی ماه نیز به‌طور منصفانه سود بگیرند. نمونهٔ اول (نگین امید زرین) نرخ سود سپردهٔ صفر دارد؛ نمونهٔ سوم نرخ ۰٫۱٪ را
+  صرفاً برای تمرین این لایه فعال می‌کند.
 - **ذخیره و سوخت نکول**: اقساط وصول‌نشده از ورودی نقد کسر می‌شوند؛ هم‌زمان ذخیرهٔ زیان موردانتظار (وام × نکول × LGD) در ماه
   اعطا به‌صورت غیرنقدی در حاشیه شناسایی و اصل وصول‌نشده پس از سررسید آخرین قسط + مهلت سوخت، از مانده تسهیلات خارج می‌شود.
-  نرخ نکول صفر (پیش‌فرض هر سه نمونه) این لایه را کاملاً خنثی نگه می‌دارد.
+  نرخ نکول صفر (پیش‌فرض هر دو نمونه) این لایه را کاملاً خنثی نگه می‌دارد.
 - **حداقل مانده پله**: موتور تجمیعی فقط در صورت رسیدن میانگین سپردهٔ مشتری نمونه به حداقل مانده، تعهد وام را برای آن حالت لحاظ می‌کند. محاسبه‌گر مشتری نیز همان شرط را برای ماندهٔ واردشده اعمال می‌کند.
 - **پله بدون اعطا**: پله‌ای که وامی اعطا نمی‌کند (حداقل مانده برآورده نشده یا `α_eff = 0`) وام‌گیرنده‌ای هم ندارد؛ بنابراین خروج سپرده‌اش فقط با `ω_churn` برآورد می‌شود و تعداد وام‌گیرندهٔ آن صفر گزارش می‌گردد (در جدول تعهدات با نشان «بدون اعطا» مشخص است).
 - **بهداشت ورودی موتور**: همهٔ ورودی‌های عددی (پله، پیکربندی، رفتار، زمان‌بندی) پیش از محاسبه با `finite`/`bounded` پالایش می‌شوند؛ یک مقدار `NaN`/خالی نمی‌تواند کل ماتریس و شاخص‌ها را `NaN` کند و داشبورد به‌اشتباه «پایدار» نشان دهد.
@@ -278,8 +280,10 @@ src/
 - **نکول**: بخش وصول‌نشده اقساط از جریان نقد حذف می‌شود و اصل وصول‌نشده تا زمان تعریف فرض بازیافت/سوخت‌شدن، در مانده تسهیلات باقی می‌ماند. ارقام «کل بازپرداخت/کارمزد» در روش‌شناسی **قراردادی**‌اند و وصولی واقعی در افق، جداگانه گزارش می‌شود.
 - **زمان‌بندی سفارشی**: ویژه‌های خارج از افق حذف و سهم باقی‌مانده بازمقیاس می‌شود؛ پیش‌نمایش ریالی جدول زمان‌بندی نیز از همان مخرج استفاده می‌کند تا با ماتریس واگرا نشود.
 - **افق کوتاه**: اگر بخشی از تعهدات/اقساط خارج از افق قرار گیرد، هشدار شفاف نمایش داده می‌شود.
-- **الگوهای نمونه**: اعداد صرفاً برای نمایش رفتار مدل انتخاب شده‌اند، به مؤسسهٔ مشخصی وابستگی ندارند و پیشنهاد تسهیلات محسوب نمی‌شوند.
-- **اعداد طلایی**: `src/lib/golden.test.ts` سنجه‌های سه الگوی نمونه را با ورودی‌های پیش‌فرض، در سطح ریال گرد‌شده، فریز کرده است. هر تغییری که این اعداد را جابه‌جا کند باید آگاهانه و همراه با به‌روزرسانی همان فایل باشد.
+- **نمونهٔ نگین امید زرین**: منابع عمومی نوع قرض‌الحسنه، گزینه‌های کارمزد ۰/۲/۴٪، انتظار ۱ تا ۱۸ ماه، اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه و سقف کل طرح تا ۱۰ میلیارد ریال را گزارش می‌کنند. دربارهٔ سقف هر فرد اختلاف وجود دارد: گزارش اولیهٔ [خبرگزاری دانشجو](https://snn.ir/fa/news/1313160/%D8%B4%D8%B1%D8%A7%DB%8C%D8%B7-%D8%A7%D8%AE%D8%B0-%D9%88%D8%A7%D9%85-%DB%8C%DA%A9-%D9%85%DB%8C%D9%84%DB%8C%D8%A7%D8%B1%D8%AF%DB%8C-%D8%A8%D8%A7%D9%86%DA%A9-%D8%B3%D9%BE%D9%87-%D8%AC%D8%B2%D8%A6%DB%8C%D8%A7%D8%AA-%D8%AC%D8%AF%DB%8C%D8%AF) سقف فردی را ۱۰ میلیارد ریال ذکر می‌کند، ولی فهرست‌های به‌روزشدهٔ [رده](https://www.rade.ir/loan-interest-free-loan/704662-%D9%88%D8%A7%D9%85-%D9%86%DA%AF%DB%8C%D9%86-%D8%A7%D9%85%DB%8C%D8%AF-%D8%B2%D8%B1%DB%8C%D9%86-%D8%A8%D8%A7%D9%86%DA%A9-%D8%B3%D9%BE%D9%87/) و [بانک اول](https://bankavl.com/%D8%A8%D8%AE%D8%B4-%D9%88%D8%A7%D9%85-%D8%AA%D8%B3%D9%87%DB%8C%D9%84%D8%A7%D8%AA-%D8%A8%D8%A7%D9%86%DA%A9%DB%8C-42/60429-%D8%B4%D8%B1%D8%A7%DB%8C%D8%B7-%D8%AF%D8%B1%DB%8C%D8%A7%D9%81%D8%AA-%D9%88%D8%A7%D9%85-%D9%85%DB%8C%D9%84%DB%8C%D8%A7%D8%B1%D8%AF-%D8%AA%D9%88%D9%85%D8%A7%D9%86%DB%8C-%D8%A8%D8%A7%D9%86%DA%A9-%D8%B3%D9%BE%D9%87-%D8%A8%D8%A7-%DA%A9%D8%A7%D8%B1%D9%85%D8%B2%D8%AF-%D8%B5%D9%81%D8%B1-%D8%AF%D8%B1%D8%B5%D8%AF-%D8%AC%D8%B2%D8%A6%DB%8C%D8%A7%D8%AA) سقف کل یک میلیارد و سقف فردی ۳۰۰ میلیون تومان را گزارش می‌کنند. به همین علت پیش‌فرض مدل برای سقف فردی ۳۰۰ میلیون تومان است و باید پیش از استفادهٔ اعتباری با بانک تطبیق داده شود.
+- **فرض‌های بانکیِ تأییدنشده**: پله‌ها، تخصیص‌ها و ضرایب پیش‌فرض نمونهٔ اول جدول رسمی نیستند. موتور، کارمزد را با فرمول سادهٔ سالانهٔ قرض‌الحسنهٔ خودش محاسبه می‌کند؛ این فرمول با جزئیات پرداخت منتشرشده یکسان بودنش تأیید نشده است. نمونهٔ سوم نیز یک طرح مرابحهٔ آموزشی است.
+- **بازهٔ انتظار**: حد عمومی در موتور، سازنده، بهینه‌یاب و ورود فایل ۱ تا ۱۸ ماه است؛ نمونهٔ سوم در خود الگو روی ۲ تا ۱۲ ماه تنظیم شده است.
+- **اعداد طلایی**: `src/lib/golden.test.ts` سنجه‌های دو الگوی نمونه را با ورودی‌های پیش‌فرض، در سطح ریال گرد‌شده، فریز کرده است. هر تغییری که این اعداد را جابه‌جا کند باید آگاهانه و همراه با به‌روزرسانی همان فایل باشد.
 - **سنجه‌های LCR/NSFR**: تقریب آموزشی برای مقایسهٔ طرح‌ها هستند و تعریف کمیتهٔ بال یا الزام ناظر داخلی را پیاده نمی‌کنند. همهٔ ضرایب‌شان از رابط کاربری می‌آید و با سناریو ذخیره می‌شود.
 - **شکاف سررسید (WAL)**: سمت تعهدات روی همان خروجی نردبان (`برداشت + سود پرداختی سپرده + ماندهٔ زندهٔ افق`) وزن می‌شود.
   پیش‌تر سود سپرده از این میانگین کنار گذاشته می‌شد و در طرح‌های دارای سود (نمونهٔ سوم) عمر تعهدات حدود یک ماه کوتاه‌تر
@@ -297,23 +301,13 @@ src/
 - **بهینه‌یاب**: جست‌وجوی مختصاتی است، نه تضمین بهینهٔ سراسری. اگر هیچ طرحی همهٔ قیدها را برآورده نکند، کم‌نقض‌ترین طرح
   (بر پایهٔ «شدت نقض» نمایش‌داده‌شده در جدول) پیشنهاد می‌شود و عنوان کارت به «کم‌نقض‌ترین طرح یافت‌شده» تغییر می‌کند تا
   با «طرح بهینه» اشتباه گرفته نشود؛ دکمهٔ اعمال تا اجرای مجدد (پس از تغییر ورودی) غیرفعال می‌ماند.
-- **نمونه طرح سوم**: یک نردبان ۱۲ پله‌ای هم‌راستاست — انتظار ۳ تا ۱۲ ماه، بازپرداخت ۱۲ تا ۶۰ ماه، نرخ مصوب ۵٪ تا ۲۳٪ و
-  ضریب برابری ۶۰٪ تا ۱۲۰٪، همه رو به بالا. تنها ستون نزولی «سهم تخصیص» است (۱۱٫۰۹٪ → ۵٫۵۶٪) و این عمدی است: پله‌های
-  کوتاه‌مدت زودتر نقد می‌شوند، پس کسری نقدینگی و هزینهٔ تأمین بین‌بانکی کمتر می‌شود. نتیجه: حاشیهٔ خالص ≈+۵٫۱۰ میلیارد
-  ریال، حفرهٔ نقدینگی ۴۳٫۸۶٪ (زیر سقف ۴۵٪)، اهرم ۱٫۶۰، بازیابی ماه ۳۳ و ماندهٔ پایان افق ≈+۱۱٫۷۷ میلیارد ریال — تنها
-  الگوی پیش‌فرض با حاشیهٔ مثبت و تنها الگویی که همهٔ قیدهای پیش‌فرض بهینه‌یاب را برآورده می‌کند.
-  نرخ سود سپردهٔ آن ۰٫۱٪ است (عملاً صفر، مثل سپردهٔ جاری) و این از خودِ جدول نرخ نتیجه می‌شود: اگر نرخ سپرده از
-  پله‌های ارزان جدول (۵٪، ۹٪، ۱۰٪…) بالاتر باشد، سود پرداختی به سپرده‌گذار از درآمد تسهیلات بیشتر می‌شود و طرح با
-  *هر* چینش پله‌ای زیان‌ده می‌ماند، چون کف زیان همان سود سپرده است. اندازه‌گیری روی شبکهٔ α/تخصیص/چینش انتظار با نرخ
-  ۲۰٫۵٪ کمینهٔ حفرهٔ ≈۷۱٪ و حاشیهٔ ≈−۱۳٫۷ میلیارد ریال می‌داد؛ آزمون `prices every step above the cost of funds`
-  همین دام را نگهبانی می‌کند.
+- **نمونهٔ سوم**: نردبان ۷ پله‌ایِ افزایشی است؛ انتظار ۲ تا ۱۲ ماه، اقساط دقیقاً ۱۶/۲۴/۳۲/۴۰/۴۸/۵۶/۶۰ ماه، ضریب ۲۵٪ تا ۲۰۰٪ و نرخ اختصاصی ۵٪ تا ۲۳٪. با ورودی‌های پیش‌فرض این نسخه، حفرهٔ نقدینگی ۳۷٫۷۱٪ منابع خالص، اهرم ۱٫۵۱، بازیابی ماه ۳۴، ماندهٔ پایان افق حدود ۱۰٫۵۹ میلیارد تومان و حاشیهٔ خالص حدود ۴٫۱۸ میلیارد تومان است؛ این‌ها خروجی مدل آموزشی‌اند، نه پیش‌بینی یا تضمین عملکرد بانکی.
 - **مونت‌کارلو**: مقیاس توزیع‌ها تعریف خود لغزندهٔ «شدت» است (در شدت ۱۰۰٪، σ نرخ‌ها ۲۰ واحد درصد و σ لگاریتمی حجم منابع ۲۵٪). شدت صفر اجرا را دقیقاً به شبیه‌سازی قطعی برمی‌گرداند.
 - **فونت**: وزیرمتن متغیر به‌صورت محلی بسته‌بندی شده (مجوز OFL-1.1 در `src/assets/fonts/OFL.txt`) و در خروجی تک‌فایل درون‌خط می‌شود؛ برنامه برای نمایش فارسی به اینترنت نیاز ندارد.
 
 </div>
 
-> **Disclaimer:** This tool is for analytical and educational simulation only. Sample profiles are illustrative and
-> do not describe a specific institution or guarantee eligibility, approval, or disbursement. It is **not** financial advice.
+> **Disclaimer:** This tool is for analytical and educational simulation only. Sample one reflects some publicly reported headline terms of Bank Sepah's Negin Omid Zarin, but its coefficients, allocations, individual cap assumption and installment formula are not an official bank schedule. The other sample is an educational Murabaha design. Nothing here guarantees eligibility, approval, or disbursement, and it is **not** financial advice.
 
 ---
 

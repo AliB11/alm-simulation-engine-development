@@ -11,7 +11,7 @@ export type Currency = 'toman' | 'rial';
 export interface Tier {
   id: string;
   name: string;
-  /** دوره ماندگاری / انتظار سپرده (ماه) — ۱ تا ۱۲ */
+  /** دوره ماندگاری / انتظار سپرده (ماه) — بازهٔ عمومی ۱ تا ۱۸ */
   tDep: number;
   /** دوره بازپرداخت تسهیلات (ماه) — ۶ تا ۶۰ */
   tLoan: number;
@@ -27,7 +27,7 @@ export interface Tier {
 
 export interface GlobalConfig {
   contractType: ContractType;
-  /** نرخ کارمزد سالانه قرض‌الحسنه (درصد) */
+  /** گزینهٔ کارمزد/نرخ قرض‌الحسنه (درصد)؛ موتور آن را با فرض سادهٔ سالانه تفسیر می‌کند */
   qardFeeRate: number;
   /** نرخ سود سالانه مرابحه (درصد) */
   murabahaRate: number;

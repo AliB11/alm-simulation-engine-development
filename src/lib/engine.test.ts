@@ -60,17 +60,17 @@ describe('customer loan estimate', () => {
     minBalance: 1_000_000,
   };
 
-  it('estimates the shipped 4-month / 12-installment example with the configured Qard formula', () => {
-    const sample = presetInput('sample-2');
-    const exampleTier = sample.tiers.find((candidate) => candidate.tDep === 4 && candidate.tLoan === 12);
-    assert.ok(exampleTier, 'the default sample must include a 4-month / 12-installment option');
-    const offer = estimateTierOffer(exampleTier, sample.config, 100_000_000);
+  it('estimates the Negin Omid Zarin sample maximum-ratio option with the configured Qard formula', () => {
+    const sample = presetInput('sample-1');
+    const maxRatioTier = sample.tiers.find((candidate) => candidate.tDep === 18 && candidate.tLoan === 12 && candidate.alpha === 300);
+    assert.ok(maxRatioTier, 'the Negin Omid Zarin sample must include the 18-month / 12-installment, 300% boundary');
+    const offer = estimateTierOffer(maxRatioTier, sample.config, 100_000_000);
     assert.equal(offer.eligible, true);
-    assert.equal(offer.loan, 110_000_000);
+    assert.equal(offer.loan, 300_000_000);
     assert.equal(offer.capped, false);
-    expectClose(offer.monthlyPayment, calcPmt('qard', 110_000_000, 12, 4));
-    assert.ok(Math.abs(offer.totalRepayment - 114_400_000) < 1e-6);
-    assert.ok(Math.abs(offer.totalCharge - 4_400_000) < 1e-6);
+    expectClose(offer.monthlyPayment, calcPmt('qard', 300_000_000, 12, 2));
+    assert.ok(Math.abs(offer.totalRepayment - 306_000_000) < 1e-6);
+    assert.ok(Math.abs(offer.totalCharge - 6_000_000) < 1e-6);
   });
 
   it('applies the individual loan cap after calculating the raw eligible amount', () => {
@@ -468,16 +468,16 @@ describe('sensitivity — default rate driver', () => {
   it('exposes the default rate as a bounded sensitivity variable', () => {
     const def = SENS_VARS.find((v) => v.key === 'defaultRate');
     assert.ok(def, 'defaultRate must be a sensitivity variable');
-    assert.deepEqual(def!.values(presetInput('sample-2')), [0, 2, 5, 10, 15, 25, 40]);
-    const shocked = applySensitivity(presetInput('sample-2'), 'defaultRate', 25);
+    assert.deepEqual(def!.values(presetInput('sample-1')), [0, 2, 5, 10, 15, 25, 40]);
+    const shocked = applySensitivity(presetInput('sample-1'), 'defaultRate', 25);
     assert.equal(shocked.config.defaultRate, 25);
-    assert.equal(shocked.behavior.takeUpRate, presetInput('sample-2').behavior.takeUpRate);
-    const clamped = applySensitivity(presetInput('sample-2'), 'defaultRate', 400);
+    assert.equal(shocked.behavior.takeUpRate, presetInput('sample-1').behavior.takeUpRate);
+    const clamped = applySensitivity(presetInput('sample-1'), 'defaultRate', 400);
     assert.equal(clamped.config.defaultRate, 100);
   });
 
   it('moves the hole and provision when the default grid is swept', () => {
-    const input = presetInput('sample-2');
+    const input = presetInput('sample-1');
     const grid = runSensitivity(input, 'defaultRate', 'takeUpRate');
     assert.ok(grid.xs.includes(0));
     const lo = grid.cells[0][0];

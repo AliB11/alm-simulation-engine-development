@@ -37,6 +37,7 @@ import type {
   TierResult,
   Vintage,
 } from '../types';
+import { TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
 
 export const EPS = 1e-6;
 
@@ -360,7 +361,7 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     const wTier = tierWithdrawalFactor(behavior, lends);
     const rate = tierRate(tier, config);
     const T = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
-    const tDep = Math.round(bounded(tier.tDep, 0, MAX_MONTHS, 1));
+    const tDep = Math.round(bounded(tier.tDep, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN));
     const unit = amortization(contract, 1, T, rate); // جدول استهلاک واحد (L = 1)
     const unitPay = unit.length ? unit[0].payment : 0;
 
@@ -683,7 +684,7 @@ export function sampleComparison(tiers: Tier[], config: GlobalConfig, sample: nu
   return (Array.isArray(tiers) ? tiers.filter((t) => !!t) : []).map((tier, index) => {
     const offer = estimateTierOffer(tier, config, S);
     const T = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
-    const tDep = bounded(tier.tDep, 0, MAX_MONTHS, 0);
+    const tDep = bounded(tier.tDep, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN);
     const { rate, eligible, rawLoan, loan, capped, monthlyPayment: pmt, totalRepayment: totalRepay, totalCharge: totalFee } = offer;
     const roi = loan > 0 ? totalFee / loan : 0;
     const i = solveMonthlyRate(loan, pmt, T);

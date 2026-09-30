@@ -7,7 +7,7 @@ import { presetInput } from './testUtils';
 /**
  * آزمون «اعداد طلایی» (Golden Numbers)
  *
- * سنجه‌های کلیدی سه الگوی نمونه با ورودی‌های پیش‌فرض، در سطح ریال
+ * سنجه‌های کلیدی دو الگوی نمونه با ورودی‌های پیش‌فرض، در سطح تومان
  * گرد (round) شده، فریز می‌شوند. هر تغییر در موتور که این اعداد را
  * جابه‌جا کند، یا یک باگ رگرسیونی است یا یک تغییر عمدی مدل که باید
  * آگاهانه و با به‌روزرسانی همین فایل انجام شود.
@@ -17,65 +17,44 @@ const GOLDEN: Record<string, Record<string, number | null>> = {
   'sample-1': {
     totalDeposit: 50000000000,
     netDeposit: 45000000000,
-    totalCommitment: 48420000000,
-    maxHole: 36239000000,
-    minCumMonth: 12,
-    tippingPoint: 12,
-    recoveryMonth: 30,
-    deficitMonths: 18,
-    endCum: 6721600000,
-    leverage: 1.987111111,
-    interbankCost: 5115159750,
+    totalCommitment: 31410360000,
+    maxHole: 25573992800,
+    minCumMonth: 18,
+    tippingPoint: 18,
+    recoveryMonth: 44,
+    deficitMonths: 26,
+    endCum: 4288457200,
+    leverage: 1.6091191111111112,
+    interbankCost: 5644586933,
     borrowers: 360,
-    peakOutflow: 53800000000,
+    peakOutflow: 58310000000,
     totalProfitPaid: 0,
-    totalIncomeInHorizon: 3261600000,
-    netInterestIncome: 3261600000,
+    totalIncomeInHorizon: 1442707200,
+    netInterestIncome: 1442707200,
     totalProvision: 0,
     totalWriteOff: 0,
-    netMargin: -1853559750,
-  },
-  'sample-2': {
-    totalDeposit: 50000000000,
-    netDeposit: 45000000000,
-    totalCommitment: 40212000000,
-    maxHole: 28112960000,
-    minCumMonth: 12,
-    tippingPoint: 12,
-    recoveryMonth: 24,
-    deficitMonths: 12,
-    endCum: 5781280000,
-    leverage: 1.804711111,
-    interbankCost: 3205266200,
-    borrowers: 360,
-    peakOutflow: 39190000000,
-    totalProfitPaid: 0,
-    totalIncomeInHorizon: 2429280000,
-    netInterestIncome: 2429280000,
-    totalProvision: 0,
-    totalWriteOff: 0,
-    netMargin: -775986200,
+    netMargin: -4201879733,
   },
   'sample-3': {
     totalDeposit: 50000000000,
     netDeposit: 45000000000,
-    totalCommitment: 30938940000,
-    maxHole: 19737043879,
+    totalCommitment: 26982000000,
+    maxHole: 16970358386,
     minCumMonth: 12,
-    tippingPoint: 9,
-    recoveryMonth: 33,
-    deficitMonths: 24,
-    endCum: 11774172530,
-    leverage: 1.598643111,
-    interbankCost: 4065590855,
+    tippingPoint: 6,
+    recoveryMonth: 34,
+    deficitMonths: 28,
+    endCum: 10594780398,
+    leverage: 1.5107111111111111,
+    interbankCost: 4126193199,
     borrowers: 360,
-    peakOutflow: 13778975958,
-    totalProfitPaid: 68725867,
-    totalIncomeInHorizon: 9234303372,
-    netInterestIncome: 9165577506,
+    peakOutflow: 15003654167,
+    totalProfitPaid: 61228333,
+    totalIncomeInHorizon: 8365334632,
+    netInterestIncome: 8304106298,
     totalProvision: 0,
     totalWriteOff: 0,
-    netMargin: 5099986651,
+    netMargin: 4177913099,
   },
 };
 
@@ -128,7 +107,7 @@ describe('golden numbers for shipped presets', () => {
   });
 
   it('does not mutate the input tiers while simulating', () => {
-    const input = presetInput('sample-2');
+    const input = presetInput('sample-1');
     const before = JSON.stringify(input.tiers);
     simulate(input, true);
     assert.equal(JSON.stringify(input.tiers), before);

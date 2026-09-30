@@ -22,8 +22,9 @@ import {
 import { globalRate, simulate } from './engine';
 import { PRESETS } from './presets';
 import { near, presetInput } from './testUtils';
+import { TIER_WAIT_MAX } from './limits';
 
-const input = presetInput('sample-2');
+const input = presetInput('sample-1');
 const sumAlloc = (tiers: Tier[]) => tiers.reduce((s, t) => s + t.allocation, 0);
 
 /** قرارداد رتبه‌بندی بهینه‌یاب، به شکل قابل آزمون */
@@ -76,7 +77,7 @@ describe('design optimizer — lever mechanics', () => {
 
     const up = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, tDepShift: 40, tLoanShift: 400 });
     up.forEach((t) => {
-      assert.equal(t.tDep, 12);
+      assert.equal(t.tDep, TIER_WAIT_MAX);
       assert.equal(t.tLoan, 60);
     });
   });
@@ -135,7 +136,7 @@ describe('design optimizer — lever mechanics', () => {
     const out = applyLevers(broken, levers, 21);
     assert.equal(out.length, 2);
     for (const t of out) {
-      assert.ok(Number.isFinite(t.tDep) && t.tDep >= 1 && t.tDep <= 12);
+      assert.ok(Number.isFinite(t.tDep) && t.tDep >= 1 && t.tDep <= TIER_WAIT_MAX);
       assert.ok(Number.isFinite(t.tLoan) && t.tLoan >= 6 && t.tLoan <= 60);
       assert.ok(Number.isFinite(t.alpha) && t.alpha >= 0);
       assert.ok(Number.isFinite(t.allocation) && t.allocation >= 0);
@@ -280,11 +281,11 @@ describe('design optimizer — objective, constraints and search', () => {
     //
     // خودِ نمونهٔ سوم دیگر این شرایط را ندارد (نرخ سود سپرده‌اش ۰٫۱٪ شد)، پس
     // فیکسچر «زیر آب» را خودِ آزمون می‌سازد تا به یک الگوی پیش‌فرض وابسته
-    // نماند. با نرخ سپردهٔ ۲۰٫۵٪ ده پله از دوازده پله ارزان‌تر از تأمین‌اند.
+    // نماند. با نرخ سپردهٔ ۲۰٫۵٪ شش پله از هفت پله ارزان‌تر از تأمین‌اند.
     const base = presetInput('sample-3');
     const underwater = { ...base, config: { ...base.config, depositProfitRate: 20.5 } };
     const cheaper = underwater.tiers.filter((t) => (t.rateOverride as number) < 20.5).length;
-    assert.equal(cheaper, 10, 'ten of twelve steps must lend below the deposit rate');
+    assert.equal(cheaper, 6, 'six of seven steps must lend below the deposit rate');
     assert.ok(simulate(underwater, false).kpis.netMargin < 0, 'the fixture must start loss-making at face value');
 
     const res = optimizeDesign(underwater, { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
@@ -308,9 +309,9 @@ describe('design optimizer — objective, constraints and search', () => {
   });
 
   it('collapses lever combinations that land on the same tiers into one candidate', () => {
-    // رگرسیون: tDep در ۱۲ و tLoan در ۶۰ مهار می‌شوند، پس چندین جابه‌جایی
+    // رگرسیون: tDep در ۱۸ و tLoan در ۶۰ مهار می‌شوند، پس چندین جابه‌جایی
     // مثبت به پله‌های یکسان می‌رسیدند و فهرست نامزدها را با ردیف تکراری پر می‌کردند.
-    const saturated = input.tiers.map((t) => ({ ...t, tDep: 12, tLoan: 60 }));
+    const saturated = input.tiers.map((t) => ({ ...t, tDep: TIER_WAIT_MAX, tLoan: 60 }));
     assert.equal(
       designFingerprint(applyLevers(saturated, { ...NEUTRAL_LEVERS, tDepShift: 1 })),
       designFingerprint(applyLevers(saturated, { ...NEUTRAL_LEVERS, tDepShift: 4 })),

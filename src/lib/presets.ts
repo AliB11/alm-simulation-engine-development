@@ -53,6 +53,8 @@ export function labelTiers(tiers: Tier[]): Tier[] {
   return tiers.map((tier, index) => ({ ...tier, name: tierLabel(index) }));
 }
 
+export type PresetRange = readonly [minimum: number, maximum: number];
+
 export interface Preset {
   key: string;
   name: string;
@@ -60,101 +62,79 @@ export interface Preset {
   contractType: ContractType;
   rate: number;
   loanCap: number;
+  /** نرخ‌های مجاز محصول برای انتخاب کاربر؛ برای نمونهٔ نگین امید زرین */
+  rateOptions?: readonly number[];
+  /** گزینه‌های اقساطی که این الگو نمایش می‌دهد */
+  repaymentTerms?: readonly number[];
+  /** سقف کل اعلام‌شدهٔ محصول؛ ممکن است با سقف هر فرد تفاوت داشته باشد */
+  programCap?: number;
+  /** دامنه‌های نمایشی مشخصات همین الگو (به‌ترتیب: حداقل، حداکثر) */
+  waitingRange?: PresetRange;
+  alphaRange?: PresetRange;
+  tierRateRange?: PresetRange;
   /** نرخ سود پرداختی روی خود سپرده؛ صفر یعنی الگوی سپرده بدون سود */
   depositProfitRate: number;
   tiers: Omit<Tier, 'id'>[];
 }
 
+const SAMPLE_ONE_REPAYMENT_TERMS = [12, 24, 36, 48, 60] as const;
+const SAMPLE_THREE_REPAYMENT_TERMS = [16, 24, 32, 40, 48, 56, 60] as const;
+
 /**
- * سه الگوی عمومی و قابل‌ویرایش برای شروع طراحی محصول.
- * اعداد صرفاً نمونه‌اند و به محصول یا مؤسسهٔ مشخصی نسبت داده نمی‌شوند.
+ * دو الگوی قابل‌ویرایش برای شروع طراحی محصول.
+ * اعدادِ طرح نگین امید زرین بر پایهٔ شرایط عمومی منتشرشده چیده شده‌اند؛
+ * تخصیص‌ها و جفت‌کردن هر پله با یک دوره، فرض‌های شبیه‌سازی‌اند نه قرارداد بانک.
  */
 export const PRESETS: Preset[] = [
   {
     key: 'sample-1',
-    name: 'نمونه طرح اول',
-    description: 'الگوی قرض‌الحسنه با دوره‌های انتظار و بازپرداخت متنوع؛ همهٔ ضرایب و حدود صرفاً نمونه و قابل ویرایش‌اند.',
+    name: 'نمونه طرح اول · نگین امید زرین بانک سپه',
+    description:
+      'قرض‌الحسنه با کارمزد انتخابی ۰، ۲ یا ۴٪؛ انتظار ۱ تا ۱۸ ماه و اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه. سقف کل اعلامی ۱ میلیارد تومان است؛ چون منابع درباره سقف فردی اختلاف دارند، مدل به‌طور محافظه‌کارانه ۳۰۰ میلیون می‌گیرد. ضرایب و سهم‌ها آموزشی‌اند.',
     contractType: 'qard',
-    rate: 4,
+    rate: 2,
+    rateOptions: [0, 2, 4],
+    repaymentTerms: SAMPLE_ONE_REPAYMENT_TERMS,
+    waitingRange: [1, 18],
+    programCap: 1_000_000_000,
     loanCap: 300_000_000,
     depositProfitRate: 0,
     tiers: [
-      { name: tierLabel(0), tDep: 1, tLoan: 6, alpha: 60, minBalance: 5_000_000, allocation: 10, rateOverride: null },
-      { name: tierLabel(1), tDep: 3, tLoan: 12, alpha: 90, minBalance: 10_000_000, allocation: 15, rateOverride: null },
-      { name: tierLabel(2), tDep: 6, tLoan: 24, alpha: 90, minBalance: 20_000_000, allocation: 25, rateOverride: null },
-      { name: tierLabel(3), tDep: 12, tLoan: 12, alpha: 370, minBalance: 30_000_000, allocation: 20, rateOverride: null },
-      { name: tierLabel(4), tDep: 12, tLoan: 36, alpha: 125, minBalance: 30_000_000, allocation: 20, rateOverride: null },
-      { name: tierLabel(5), tDep: 12, tLoan: 60, alpha: 75, minBalance: 30_000_000, allocation: 10, rateOverride: null },
-    ],
-  },
-  {
-    key: 'sample-2',
-    name: 'نمونه طرح دوم',
-    description: 'الگوی قرض‌الحسنه برای آزمودن گزینه‌های مختلف؛ ترکیب ۴ ماه انتظار و ۱۲ قسط نیز در آن تعریف شده است.',
-    contractType: 'qard',
-    rate: 4,
-    loanCap: 300_000_000,
-    depositProfitRate: 0,
-    tiers: [
-      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 27, minBalance: 1_000_000, allocation: 10, rateOverride: null },
-      { name: tierLabel(1), tDep: 3, tLoan: 24, alpha: 40, minBalance: 1_000_000, allocation: 15, rateOverride: null },
-      { name: tierLabel(2), tDep: 4, tLoan: 12, alpha: 110, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: tierLabel(3), tDep: 6, tLoan: 36, alpha: 60, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: tierLabel(4), tDep: 12, tLoan: 12, alpha: 320, minBalance: 1_000_000, allocation: 20, rateOverride: null },
-      { name: tierLabel(5), tDep: 12, tLoan: 60, alpha: 60, minBalance: 1_000_000, allocation: 15, rateOverride: null },
+      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 16.67, minBalance: 0, allocation: 30, rateOverride: null },
+      { name: tierLabel(1), tDep: 18, tLoan: 12, alpha: 300, minBalance: 0, allocation: 5, rateOverride: null },
+      { name: tierLabel(2), tDep: 18, tLoan: 24, alpha: 150, minBalance: 0, allocation: 20, rateOverride: null },
+      { name: tierLabel(3), tDep: 18, tLoan: 36, alpha: 100, minBalance: 0, allocation: 20, rateOverride: null },
+      { name: tierLabel(4), tDep: 18, tLoan: 48, alpha: 75, minBalance: 0, allocation: 15, rateOverride: null },
+      { name: tierLabel(5), tDep: 18, tLoan: 60, alpha: 60, minBalance: 0, allocation: 10, rateOverride: null },
     ],
   },
   {
     key: 'sample-3',
     name: 'نمونه طرح سوم',
     description:
-      'الگوی مرابحه با ۱۲ حالت پلکانی و هم‌راستا: از انتظار ۳ ماهه با نرخ ۵٪ و بازپرداخت ۱۲ ماهه آغاز می‌شود و پله‌پله تا انتظار ۱۲ ماهه، نرخ ۲۳٪ و بازپرداخت ۶۰ ماهه بالا می‌رود؛ سهم پله‌های کوتاه‌مدت بیشتر است چون زودتر نقد می‌شوند.',
+      'الگوی مرابحهٔ ۷ پله‌ای؛ انتظار از ۲ تا ۱۲ ماه، اقساط ۱۶/۲۴/۳۲/۴۰/۴۸/۵۶/۶۰ ماه، ضریب برابری ۲۵٪ تا ۲۰۰٪ و نرخ اختصاصی ۵٪ تا ۲۳٪. سهم‌های تخصیص، فرض‌های آموزشی و قابل‌ویرایش‌اند.',
     contractType: 'murabaha',
     rate: 21,
+    repaymentTerms: SAMPLE_THREE_REPAYMENT_TERMS,
+    waitingRange: [2, 12],
+    alphaRange: [25, 200],
+    tierRateRange: [5, 23],
     loanCap: 400_000_000,
     depositProfitRate: 0.1,
-    /**
-     * نردبان ۱۲ پله‌ای نمونهٔ سوم.
-     *
-     * چهار ستون طراحی به‌طور یکنواخت و هم‌جهت بالا می‌روند تا فهرست حالت‌ها
-     * قابل خواندن و قابل دفاع باشد:
-     *   • دورهٔ انتظار    ۳ ← ۱۲ ماه
-     *   • دورهٔ بازپرداخت ۱۲ ← ۶۰ ماه
-     *   • نرخ عقد         ۵٪ ← ۲۳٪ (جدول نرخ مصوب محصول؛ نرخ اختصاصی هر پله)
-     *   • ضریب برابری α   ۶۰٪ ← ۱۲۰٪ (انتظار بلندتر = تسهیلات بزرگ‌تر)
-     *
-     * «سهم تخصیص» تنها ستونی است که نزولی است و این عمدی است: پله‌های
-     * کوتاه‌مدت اقساطشان درون افق ۶۰ ماهه کامل وصول می‌شود، پس منابع زودتر
-     * برمی‌گردد و کسری نقدینگی و هزینهٔ تأمین بین‌بانکی کمتر می‌شود.
-     *
-     * نرخ سود سپرده ۰٫۱٪ است — عملاً صفر، مثل سپردهٔ جاری/قرض‌الحسنه. این
-     * عمدی است و از خودِ جدول نرخ نتیجه می‌شود: اگر نرخ سپرده از پله‌های
-     * ارزان جدول (۵٪، ۹٪، ۱۰٪…) بالاتر باشد، سود پرداختی به سپرده‌گذار از
-     * درآمد تسهیلات بیشتر می‌شود و طرح با *هر* چینش پله‌ای زیان‌ده می‌ماند
-     * (کف زیان همان سود سپرده است). با ۰٫۱٪ کل جدول نرخ بالای هزینهٔ تأمین
-     * است و این تنها الگوی پیش‌فرض با حاشیهٔ خالص مثبت است (≈+۵٫۱۰ میلیارد
-     * ریال)، ضمن آنکه همهٔ قیدهای پیش‌فرض را برآورده می‌کند: حفرهٔ نقدینگی
-     * ۴۳٫۸۶٪ (سقف ۴۵)، اهرم ۱٫۶۰ (سقف ۱٫۸)، بازیابی ماه ۳۳ و ماندهٔ پایان
-     * افق مثبت.
-     */
     tiers: [
-      { name: tierLabel(0), tDep: 3, tLoan: 12, alpha: 60, minBalance: 1_000_000, allocation: 11.09, rateOverride: 5 },
-      { name: tierLabel(1), tDep: 3, tLoan: 16, alpha: 65, minBalance: 1_000_000, allocation: 10.61, rateOverride: 9 },
-      { name: tierLabel(2), tDep: 4, tLoan: 21, alpha: 70, minBalance: 1_000_000, allocation: 10.1, rateOverride: 10 },
-      { name: tierLabel(3), tDep: 5, tLoan: 25, alpha: 75, minBalance: 1_000_000, allocation: 9.6, rateOverride: 13 },
-      { name: tierLabel(4), tDep: 6, tLoan: 29, alpha: 80, minBalance: 1_000_000, allocation: 9.09, rateOverride: 15 },
-      { name: tierLabel(5), tDep: 7, tLoan: 34, alpha: 85, minBalance: 1_000_000, allocation: 8.59, rateOverride: 16 },
-      { name: tierLabel(6), tDep: 8, tLoan: 38, alpha: 95, minBalance: 1_000_000, allocation: 8.08, rateOverride: 17 },
-      { name: tierLabel(7), tDep: 9, tLoan: 43, alpha: 100, minBalance: 1_000_000, allocation: 7.58, rateOverride: 18 },
-      { name: tierLabel(8), tDep: 10, tLoan: 47, alpha: 105, minBalance: 1_000_000, allocation: 7.07, rateOverride: 19 },
-      { name: tierLabel(9), tDep: 11, tLoan: 51, alpha: 110, minBalance: 1_000_000, allocation: 6.57, rateOverride: 20 },
-      { name: tierLabel(10), tDep: 12, tLoan: 56, alpha: 115, minBalance: 1_000_000, allocation: 6.06, rateOverride: 21 },
-      { name: tierLabel(11), tDep: 12, tLoan: 60, alpha: 120, minBalance: 1_000_000, allocation: 5.56, rateOverride: 23 },
+      { name: tierLabel(0), tDep: 2, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 30, rateOverride: 5 },
+      { name: tierLabel(1), tDep: 3, tLoan: 24, alpha: 50, minBalance: 1_000_000, allocation: 20, rateOverride: 8 },
+      { name: tierLabel(2), tDep: 4, tLoan: 32, alpha: 75, minBalance: 1_000_000, allocation: 16, rateOverride: 11 },
+      { name: tierLabel(3), tDep: 6, tLoan: 40, alpha: 100, minBalance: 1_000_000, allocation: 13, rateOverride: 14 },
+      { name: tierLabel(4), tDep: 8, tLoan: 48, alpha: 125, minBalance: 1_000_000, allocation: 9, rateOverride: 17 },
+      { name: tierLabel(5), tDep: 10, tLoan: 56, alpha: 160, minBalance: 1_000_000, allocation: 7, rateOverride: 20 },
+      { name: tierLabel(6), tDep: 12, tLoan: 60, alpha: 200, minBalance: 1_000_000, allocation: 5, rateOverride: 23 },
     ],
   },
 ];
 
-export const DEFAULT_PRESET = 'sample-2';
+/** نمونهٔ اول، الگوی شروع و طرح پیش‌فرض برنامه است. */
+export const DEFAULT_PRESET = 'sample-1';
 
 export function presetTiers(key: string): Tier[] {
   const p = PRESETS.find((x) => x.key === key) ?? PRESETS[0];
@@ -163,7 +143,7 @@ export function presetTiers(key: string): Tier[] {
 
 export const DEFAULT_CONFIG: GlobalConfig = {
   contractType: 'qard',
-  qardFeeRate: 4,
+  qardFeeRate: 2,
   murabahaRate: 21,
   reserveRatio: 10,
   loanCap: 300_000_000,

@@ -23,7 +23,7 @@
 
 import type { SimInput, SimKpis, Tier } from '../types';
 import { EPS, bounded, finite, globalRate, simulate } from './engine';
-import { IMPORT_RATE_MAX, TIER_ALPHA_MAX } from './limits';
+import { IMPORT_RATE_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
 import { fmtNumber, fmtPct, fmtRatio, toFa } from './format';
 
 export type Objective = 'margin' | 'income' | 'volume' | 'safety';
@@ -82,7 +82,7 @@ export interface Constraints {
  * ۸۰٪ متقاضی + ω_churn = ۵۰٪) دست‌یافتنی نیست: خروج همزمان سپرده و تعهد
  * وام، حتی با کوچک‌ترین ضریب برابری، کسری‌ای بزرگ‌تر از ۱۰٪ منابع خالص
  * می‌سازد. نتیجه این بود که «هیچ طرح موجهی» پیدا نمی‌شد و کل منطق قیدها
- * عملاً از کار می‌افتاد. ۴۵٪ برای هر سه الگوی نمونه دست‌یافتنی است و
+ * عملاً از کار می‌افتاد. ۴۵٪ برای هر دو الگوی نمونه دست‌یافتنی است و
  * همچنان قیدِ معنا داری باقی می‌ماند.
  */
 export const DEFAULT_CONSTRAINTS: Constraints = {
@@ -178,7 +178,7 @@ function applyShifts(tiers: Tier[], l: DesignLevers, fallbackRate: number): Tier
       ...t,
       // سقف همان سقف سازندهٔ پله است تا «اعمال» طرحی نسازد که کاربر نتواند ویرایش یا ذخیره کند
       alpha: bounded(Math.max(0, finite(t.alpha, 0)) * scale, 0, TIER_ALPHA_MAX, 0),
-      tDep: bounded(t.tDep + depShift, 1, 12, 1),
+      tDep: bounded(t.tDep + depShift, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN),
       tLoan: bounded(t.tLoan + loanShift, 6, 60, 12),
       allocation: Math.max(0, finite(t.allocation, 0)),
       minBalance: Math.max(0, finite(t.minBalance, 0)),
@@ -194,8 +194,10 @@ function applyTilt(base: Tier[], tilt: AllocationTilt): Tier[] {
   if (!(total > 0)) return base;
   // وزن‌دهی بر پایهٔ دورهٔ انتظار، با حفظ مجموع سهم‌ها (بدون تغییر کل منابع تخصیصی)
   const weight = (t: Tier) => {
-    const dep = bounded(t.tDep, 1, 12, 1);
-    return tilt === 'longWait' ? 0.5 + dep / 12 : 0.5 + (13 - dep) / 12;
+    const dep = bounded(t.tDep, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN);
+    return tilt === 'longWait'
+      ? 0.5 + dep / TIER_WAIT_MAX
+      : 0.5 + (TIER_WAIT_MAX + TIER_WAIT_MIN - dep) / TIER_WAIT_MAX;
   };
   const wSum = base.reduce((s, t) => s + t.allocation * weight(t), 0);
   if (!(wSum > 0)) return base;

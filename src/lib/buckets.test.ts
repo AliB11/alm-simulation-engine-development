@@ -8,7 +8,7 @@ import { tierColor } from './presets';
 import { presetInput } from './testUtils';
 
 const rowsFor = (horizon: number) =>
-  simulate({ ...presetInput('sample-2'), config: { ...presetInput('sample-2').config, horizon } }, true).rows;
+  simulate({ ...presetInput('sample-1'), config: { ...presetInput('sample-1').config, horizon } }, true).rows;
 
 describe('time bucketing — one rule shared by the ladder and the heat map', () => {
   it('keeps the documented horizon boundaries', () => {
