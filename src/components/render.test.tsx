@@ -20,6 +20,8 @@ import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
 import { tierColor } from '../lib/presets';
+import { toFa } from '../lib/format';
+import { TierBuilder } from './TierBuilder';
 
 /**
  * آزمون دود (smoke) رابط کاربری.
@@ -66,6 +68,28 @@ suite('UI smoke — server render of every section', () => {
       'روش‌شناسی و فرمول‌های موتور شبیه‌ساز',
     ]) {
       assert.ok(html.includes(heading), `missing section: ${heading}`);
+    }
+  });
+
+  test('sample plan three exposes every report rate in an enabled, editable rate field', () => {
+    const input = presetInput('sample-3');
+    const result = simulate(input, true);
+    const html = render(
+      <TierBuilder
+        tiers={input.tiers}
+        results={result.tiers}
+        config={input.config}
+        activePreset="sample-3"
+        onChange={() => {}}
+        onLoadPreset={() => {}}
+      />,
+    );
+    const rateInputs = html.match(/<input\b[^>]*aria-label="نرخ اختصاصی [^"]*"[^>]*>/g) ?? [];
+    assert.equal(rateInputs.length, 12, 'all 12 rows should have an individually labeled rate input');
+    for (const rate of [5, 9, 10, 13, 15, 16, 17, 18, 19, 20, 21, 23]) {
+      const field = rateInputs.find((tag) => tag.includes(`value="${toFa(rate)}"`));
+      assert.ok(field, `missing editable rate ${rate}%`);
+      assert.ok(!field.includes('disabled'), `rate ${rate}% should not be locked`);
     }
   });
 

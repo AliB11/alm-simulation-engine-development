@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { labelTiers, tierLabel } from './presets';
+import { labelTiers, PRESETS, tierLabel } from './presets';
 import type { Tier } from '../types';
 
 const makeTier = (id: string, name: string): Tier => ({
@@ -12,6 +12,19 @@ const makeTier = (id: string, name: string): Tier => ({
   minBalance: 0,
   allocation: 100,
   rateOverride: null,
+});
+
+describe('sample plan three', () => {
+  it('ships all report rates as editable tier overrides across the 12–60 month term range', () => {
+    const sample = PRESETS.find((preset) => preset.key === 'sample-3');
+    assert.ok(sample);
+    assert.deepEqual(sample.tiers.map((tier) => tier.rateOverride), [5, 9, 10, 13, 15, 16, 17, 18, 19, 20, 21, 23]);
+    assert.equal(sample.tiers.length, 12);
+    assert.equal(Math.min(...sample.tiers.map((tier) => tier.tLoan)), 12);
+    assert.equal(Math.max(...sample.tiers.map((tier) => tier.tLoan)), 60);
+    assert.ok(sample.tiers.every((tier) => tier.rateOverride !== null));
+    assert.ok(Math.abs(sample.tiers.reduce((sum, tier) => sum + tier.allocation, 0) - 100) < 1e-9);
+  });
 });
 
 describe('generic tier labels', () => {
