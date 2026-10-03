@@ -83,6 +83,7 @@ export function TierComparison({
       />
       <div className="alm-scroll overflow-x-auto">
         <table className="w-full min-w-[1100px] text-[12.5px]">
+          <caption className="sr-only">مقایسهٔ پله‌ها برای یک سپرده‌گذار نمونه</caption>
           <thead className="bg-slate-50 dark:bg-slate-950/40">
             <tr>
               <th className={th}>پله</th>

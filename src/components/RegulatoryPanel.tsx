@@ -244,10 +244,16 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
         />
         <Tile
           icon={<CalendarRange />}
-          tone={reg.maturityGap === null ? 'slate' : reg.maturityGap >= 0 ? 'emerald' : 'rose'}
+          tone={reg.maturityGap === null ? 'slate' : reg.maturityGap > 0 ? 'rose' : 'emerald'}
           label="شکاف سررسید (WAL)"
           value={reg.maturityGap === null ? '—' : `${fmtNumber(reg.maturityGap, 1, true)} ماه`}
-          hint="میانگین وزنی عمر دارایی منهای میانگین وزنی عمر تعهدات"
+          hint={
+            reg.maturityGap === null
+              ? 'میانگین وزنی عمر دارایی منهای میانگین وزنی عمر تعهدات'
+              : reg.maturityGap > 0
+                ? `دارایی‌ها ${fmtNumber(reg.maturityGap, 1, true)} ماه دیرتر از منابع برمی‌گردند — فشار تأمین`
+                : `منابع ${fmtNumber(-reg.maturityGap, 1, true)} ماه دیرتر از دارایی‌ها خارج می‌شوند — بدون فشار تأمین`
+          }
         />
       </div>
 
@@ -334,6 +340,8 @@ export function RegulatoryPanel({ config, params, onParams, reg }: Props) {
           NSFR(m) = [ DepositBalance(m) × w ] ÷ [ LoanBook(m) × r ] × 100 &nbsp;(m = 12؛ در افق کوتاه‌تر، آخرین ماه)
           <br />
           WAL = Σ t × Flow(t) ÷ Σ Flow(t) &nbsp;·&nbsp; Gap = WAL(assets) − WAL(liabilities)
+          <br />
+          Gap &gt; 0 ⇒ assets return later than funding leaves (refinancing pressure) ; Gap ≤ 0 ⇒ funding outlives assets
         </div>
         <div>
           در محاسبهٔ LCR، «دارایی نقد» همان مازاد نقدینگی تجمعی مثبت پس از تنزیل (haircut) است و خروج استرس با نرخ مؤثر

@@ -20,7 +20,7 @@
 
 import type { MonthRow } from '../types';
 import { EPS, finite } from './engine';
-import { bucketCountFor, bucketSizeForRows } from './buckets';
+import { bucketCountFor, bucketLabel, bucketSizeForRows } from './buckets';
 import { eventNcf } from './eventMeta';
 
 export interface TierAttribution {
@@ -233,7 +233,7 @@ export function tierAttribution(rows: MonthRow[], colorOf: (index: number) => st
     const end = Math.min(H, (b + 1) * size);
     const fromMonth = H ? rows[start].t : 0;
     const toMonth = H ? rows[end - 1].t : 0;
-    bucketLabels.push(size === 1 ? `${fromMonth}` : `${fromMonth}–${toMonth}`);
+    bucketLabels.push(bucketLabel(fromMonth, toMonth));
     for (let t = start; t < end; t++) {
       const row = rows[t];
       inflow[b] += Math.max(0, finite(row.principalIn, 0));

@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { SensMetric } from './engine';
 import { SENS_VARS, applySensitivity, simulate } from './engine';
-import { higherIsBetter, LEVERAGE_DISPLAY_CAP, runTornado, tornadoMetric } from './tornado';
+import {
+  higherIsBetter,
+  isNegligible,
+  LEVERAGE_DISPLAY_CAP,
+  NEGLIGIBLE_SWING_SHARE,
+  runTornado,
+  tornadoMetric,
+  type TornadoBar,
+} from './tornado';
 import { presetInput } from './testUtils';
 
 const METRICS: SensMetric[] = ['maxHole', 'tipping', 'endCum', 'leverage', 'margin'];
@@ -92,6 +100,42 @@ describe('tornado — one-at-a-time risk drivers', () => {
     assert.equal(higherIsBetter('tipping'), true);
     assert.equal(higherIsBetter('maxHole'), false);
     assert.equal(higherIsBetter('leverage'), false);
+  });
+
+  it('only dims drivers that are negligible relative to the whole chart', () => {
+    const bar = (swing: number): TornadoBar => ({
+      key: 'defaultRate',
+      label: 'x',
+      symbol: 'δ',
+      current: 0,
+      low: 0,
+      high: 1,
+      base: 0,
+      lowValue: 0,
+      highValue: 0,
+      lowDelta: 0,
+      highDelta: 0,
+      swing,
+    });
+    // سهم کمتر از نیم‌درصد از کل نوسان ⇒ کم‌اثر
+    assert.equal(isNegligible(bar(0.4), 1e10, 100), true);
+    assert.equal(isNegligible(bar(0.5), 1e10, 100), false);
+    assert.equal(isNegligible(bar(0), 1e10, 100), true);
+    // بدون کل نوسان، ملاک نسبتی محافظه‌کارانه است — نه مقایسه با خودِ پایه
+    assert.equal(isNegligible(bar(1e5), 1e10), true);
+    assert.equal(isNegligible(bar(1e9), 1e10), false);
+    assert.ok(NEGLIGIBLE_SWING_SHARE > 0 && NEGLIGIBLE_SWING_SHARE < 0.05);
+
+    // رگرسیون: در طرح نمونهٔ اول، «نرخ قبولی اعتباری» با سهم ۸٫۷٪ از نوسان
+    // حداکثر کسری، نباید کم‌اثر شمرده شود (پیش‌تر آستانهٔ نادرست آن را
+    // کم‌رنگ می‌کرد).
+    const t = runTornado(input, 'maxHole');
+    const total = t.bars.reduce((s, b) => s + b.swing, 0);
+    const approval = t.bars.find((b) => b.key === 'approvalRate')!;
+    assert.ok(approval.swing / total > 0.05, 'approval rate must be a material driver here');
+    assert.equal(isNegligible(approval, t.base, total), false);
+    const trivial = t.bars.filter((b) => isNegligible(b, t.base, total));
+    for (const b of trivial) assert.ok(b.swing / total < NEGLIGIBLE_SWING_SHARE);
   });
 
   it('does not mutate the input it was given', () => {

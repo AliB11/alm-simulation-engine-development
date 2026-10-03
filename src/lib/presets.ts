@@ -90,7 +90,7 @@ export const PRESETS: Preset[] = [
     key: 'sample-1',
     name: 'نمونه طرح اول',
     description:
-      'قرض‌الحسنه با کارمزد انتخابی ۰، ۲ یا ۴٪؛ انتظار ۱ تا ۱۸ ماه، اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه و ضریب برابری ۲٫۵٪ تا ۲۲۵٪. سقف کل اعلامی ۱ میلیارد تومان است؛ چون منابع درباره سقف فردی اختلاف دارند، مدل به‌طور محافظه‌کارانه ۳۰۰ میلیون می‌گیرد. ضرایب و سهم‌ها آموزشی‌اند.',
+      'قرض‌الحسنه با کارمزد انتخابی ۰، ۲ یا ۴٪؛ شش حالت با دورهٔ انتظار پله‌ای ۱، ۳، ۶، ۹، ۱۲ و ۱۸ ماه — هرچه انتظار طولانی‌تر، ضریب برابری بیشتر و کارمزد پیش‌فرض کمتر — اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه و ضریب ۲٫۵٪ تا ۲۲۵٪. سقف کل اعلامی ۱ میلیارد تومان است؛ چون منابع درباره سقف فردی اختلاف دارند، مدل به‌طور محافظه‌کارانه ۳۰۰ میلیون می‌گیرد. ضرایب و سهم‌ها آموزشی‌اند.',
     contractType: 'qard',
     rate: 2,
     rateOptions: [0, 2, 4],
@@ -101,17 +101,25 @@ export const PRESETS: Preset[] = [
     loanCap: 300_000_000,
     depositProfitRate: 0,
     tiers: [
-      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 2.5, minBalance: 0, allocation: 60, rateOverride: null },
-      { name: tierLabel(1), tDep: 18, tLoan: 12, alpha: 225, minBalance: 0, allocation: 3, rateOverride: null },
-      { name: tierLabel(2), tDep: 18, tLoan: 24, alpha: 112.5, minBalance: 0, allocation: 10, rateOverride: null },
-      { name: tierLabel(3), tDep: 18, tLoan: 36, alpha: 75, minBalance: 0, allocation: 12, rateOverride: null },
-      { name: tierLabel(4), tDep: 18, tLoan: 48, alpha: 56.25, minBalance: 0, allocation: 9, rateOverride: null },
-      { name: tierLabel(5), tDep: 18, tLoan: 60, alpha: 45, minBalance: 0, allocation: 6, rateOverride: null },
+      /* شش ردهٔ انتظار ۱ تا ۱۸ ماه؛ ضریب و اقساط هر رده از نردبان قبلی حفظ
+         شده و انتظار هر رده یک پله بالاتر رفته است تا کل بازهٔ اعلامی پوشش
+         داده شود (پیش‌تر پنج رده روی ۱۸ ماه گیر کرده بود). کارمزد پیش‌فرض
+         هر رده هم پله‌ای است: انتظار کوتاه‌تر ⇒ کارمزد بالاتر، و مشتری می‌تواند
+         هر رده را روی ۰/۲/۴٪ یا نرخ سراسری بگذارد. */
+      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 2.5, minBalance: 0, allocation: 60, rateOverride: 4 },
+      { name: tierLabel(1), tDep: 3, tLoan: 60, alpha: 45, minBalance: 0, allocation: 6, rateOverride: 4 },
+      { name: tierLabel(2), tDep: 6, tLoan: 48, alpha: 56.25, minBalance: 0, allocation: 9, rateOverride: 2 },
+      { name: tierLabel(3), tDep: 9, tLoan: 36, alpha: 75, minBalance: 0, allocation: 12, rateOverride: 2 },
+      { name: tierLabel(4), tDep: 12, tLoan: 24, alpha: 112.5, minBalance: 0, allocation: 10, rateOverride: 0 },
+      { name: tierLabel(5), tDep: 18, tLoan: 12, alpha: 225, minBalance: 0, allocation: 3, rateOverride: 0 },
     ],
   },
   {
+    /* برچسب نمایشی «نمونه طرح دوم» است تا شماره‌گذاری پس از حذف الگوی وسط
+       پیوسته بماند؛ کلید داخلی `sample-3` عمداً تغییر نکرده تا وضعیت
+       ذخیره‌شدهٔ مرورگر و فایل‌های سناریوی قدیمی بی‌صدا خراب نشوند. */
     key: 'sample-3',
-    name: 'نمونه طرح سوم',
+    name: 'نمونه طرح دوم',
     description:
       'الگوی مرابحهٔ ۷ پله‌ای؛ انتظار از ۲ تا ۱۲ ماه، اقساط ۱۶/۲۴/۳۲/۴۰/۴۸/۵۶/۶۰ ماه، ضریب برابری ۲۵٪ تا ۲۰۰٪ و نرخ اختصاصی ۵٪ تا ۲۳٪. سهم‌های تخصیص، فرض‌های آموزشی و قابل‌ویرایش‌اند.',
     contractType: 'murabaha',

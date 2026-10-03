@@ -292,6 +292,7 @@ export function CashFlowTable({ result, config, initialLiquidity, onExportCsv }:
 
       <div className="alm-scroll max-h-[620px] overflow-auto">
         <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-[12px]">
+          <caption className="sr-only">جدول ماهیانه گردش وجوه نقد به تفکیک پله و ویژه</caption>
           <thead>
             <tr>
               <th className={cn(th, 'w-8')} />

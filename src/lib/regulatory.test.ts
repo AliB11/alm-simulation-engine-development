@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegulatoryParams } from './regulatory';
 import { computeRegulatory, DEFAULT_REGULATORY } from './regulatory';
-import { bucketSizeFor, horizonOf } from './buckets';
+import { bucketLabel, bucketSizeFor, horizonOf } from './buckets';
 import { tierAttribution } from './attribution';
 import { tierColor } from './presets';
 import { EPS, simulate } from './engine';
 import { near, presetInput } from './testUtils';
 
 const sampleOne = presetInput('sample-1');
-const sampleThree = presetInput('sample-3');
+const secondSample = presetInput('sample-3');
 const sampleOneResult = simulate(sampleOne, true);
-const sampleThreeResult = simulate(sampleThree, true);
+const secondSampleResult = simulate(secondSample, true);
 
 describe('regulatory metrics — bucketing', () => {
   it('chooses a readable bucket size for every horizon', () => {
@@ -42,7 +42,7 @@ describe('regulatory metrics — bucketing', () => {
       assert.equal(b.from, i === 0 ? firstMonth : reg.buckets[i - 1].to + 1);
       assert.ok(b.to <= lastMonth);
       assert.ok(b.to >= b.from);
-      assert.equal(b.label, reg.bucketSize === 1 ? `${b.from}` : `${b.from}–${b.to}`);
+      assert.equal(b.label, bucketLabel(b.from, b.to));
     }
     assert.equal(covered, H, 'buckets must cover every month exactly once');
   });
@@ -209,18 +209,18 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
   });
 
   it('weights deposit profit into the liability WAL, like the ladder does', () => {
-    const paying = computeRegulatory(sampleThreeResult.rows, DEFAULT_REGULATORY);
-    const profit = sampleThreeResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0);
-    assert.ok(profit > 0, 'sampleThree pays deposit profit');
+    const paying = computeRegulatory(secondSampleResult.rows, DEFAULT_REGULATORY);
+    const profit = secondSampleResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0);
+    assert.ok(profit > 0, 'secondSample pays deposit profit');
 
     let wOut = 0;
     let tOut = 0;
-    for (const row of sampleThreeResult.rows) {
+    for (const row of secondSampleResult.rows) {
       const outflow = Math.max(0, row.withdrawalOut) + Math.max(0, row.profitPaid);
       wOut += row.t * outflow;
       tOut += outflow;
     }
-    const last = sampleThreeResult.rows[sampleThreeResult.rows.length - 1];
+    const last = secondSampleResult.rows[secondSampleResult.rows.length - 1];
     wOut += last.t * last.depositBalance;
     tOut += last.depositBalance;
     assert.ok(near(paying.walLiabilities!, wOut / tOut, 1e-9));
@@ -228,7 +228,7 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
     // اگر سود سپرده کنار گذاشته شود، عمر تعهدات کوتاه‌تر و شکاف سررسید بزرگ‌تر می‌شود
     let wWd = 0;
     let tWd = 0;
-    for (const row of sampleThreeResult.rows) {
+    for (const row of secondSampleResult.rows) {
       wWd += row.t * Math.max(0, row.withdrawalOut);
       tWd += Math.max(0, row.withdrawalOut);
     }
@@ -294,9 +294,9 @@ describe('tier attribution — analytic removal of a tier', () => {
   });
 
   it('splits the portfolio-level deposit profit across tiers by their balances', () => {
-    const attr = tierAttribution(sampleThreeResult.rows, tierColor);
-    const totalProfit = sampleThreeResult.rows.reduce((s, r) => s + r.profitPaid, 0);
-    assert.ok(totalProfit > 0, 'the sampleThree preset pays deposit profit');
+    const attr = tierAttribution(secondSampleResult.rows, tierColor);
+    const totalProfit = secondSampleResult.rows.reduce((s, r) => s + r.profitPaid, 0);
+    assert.ok(totalProfit > 0, 'the secondSample preset pays deposit profit');
     const attributed = attr.tiers.reduce((s, t) => s + t.profit, 0);
     assert.ok(
       near(attributed + attr.unattributedProfit, totalProfit, 1e-9),

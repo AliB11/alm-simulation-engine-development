@@ -174,6 +174,7 @@ export function OptimizerResultTable({
   return (
     <div className="overflow-x-auto border-t border-slate-100 dark:border-slate-800">
       <table className="w-full min-w-[900px] border-collapse text-right">
+        <caption className="sr-only">نامزدهای طرح پیشنهادی و شدت نقض قیدها</caption>
         <thead>
           <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <th className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">رتبه</th>

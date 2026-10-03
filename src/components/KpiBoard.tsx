@@ -238,7 +238,10 @@ export function KpiBoard({ result, config }: { result: SimResult; config: Global
               </span>
             </>
           }
-          formula="Max Hole = \u2212min(0, min CumLiq_t)"
+          /* هشدار: در مقدار رشته‌ای JSX فرار `\uXXXX` پردازش نمی‌شود؛ علامت منهای
+             یونیکد باید به‌صورت نویسهٔ واقعی (U+2212) نوشته شود، وگرنه متن خام
+             «\u2212» در کارت چاپ می‌شود. */
+          formula="Max Hole = −min(0, min CumLiq_t)"
         />
       </div>
 
@@ -317,6 +320,7 @@ export function TierCommitmentTable({ result }: { result: SimResult }) {
       />
       <div className="alm-scroll overflow-x-auto">
         <table className="w-full min-w-[860px] text-[12.5px]">
+          <caption className="sr-only">وضعیت تعهدات و خروج سپرده به تفکیک پله</caption>
           <thead className="bg-slate-50 dark:bg-slate-950/40">
             <tr>
               <th className={th}>پله</th>

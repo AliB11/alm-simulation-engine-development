@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { configDiffs, KPI_ROWS, snapshotSlot, SLOT_META } from './scenarios';
+import { configDiffs, KPI_ROWS, kpiValue, snapshotSlot, SLOT_META } from './scenarios';
 import { fmtNumber, toFa } from './format';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
@@ -89,6 +89,21 @@ describe('scenario diff coverage', () => {
     const keys = KPI_ROWS.map((r) => r.key);
     assert.ok(keys.includes('totalProvision'));
     assert.ok(keys.includes('totalWriteOff'));
+  });
+
+  it('keeps an infinite KPI as a value so the table can show ∞ instead of a blank', () => {
+    const k = simulate(presetInput('sample-1'), false).kpis;
+    // اهرم خروج با منابع خالص صفر بی‌نهایت است؛ «—» به‌جای «∞×» یک ریسک
+    // بحرانی را پنهان می‌کرد.
+    const squeezed = simulate(
+      { ...presetInput('sample-1'), config: { ...presetInput('sample-1').config, reserveRatio: 100 } },
+      false,
+    ).kpis;
+    assert.equal(squeezed.leverage, Infinity);
+    assert.equal(kpiValue(squeezed, 'leverage'), Infinity);
+    assert.equal(kpiValue(k, 'leverage'), k.leverage);
+    assert.equal(kpiValue({ ...k, tippingPoint: null }, 'tippingPoint'), null);
+    assert.equal(kpiValue(k, 'endCum'), k.endCum);
   });
 
   it('flags custom-vintage composition changes', () => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Behavior, DepositSchedule, GlobalConfig, SimInput, Tier } from '../types';
-import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, SENS_VARS, simulate, uniformVintageCount } from './engine';
+import { amortization, applySensitivity, buildVintages, calcPmt, estimateTierOffer, runSensitivity, SENS_VARS, simulate, tierRate, uniformVintageCount } from './engine';
 import { sanitizeState } from './io';
 import { presetInput } from './testUtils';
 
@@ -68,9 +68,12 @@ describe('customer loan estimate', () => {
     assert.equal(offer.eligible, true);
     assert.equal(offer.loan, 225_000_000);
     assert.equal(offer.capped, false);
-    expectClose(offer.monthlyPayment, calcPmt('qard', 225_000_000, 12, 2));
-    assert.ok(Math.abs(offer.totalRepayment - 229_500_000) < 1e-6);
-    assert.ok(Math.abs(offer.totalCharge - 4_500_000) < 1e-6);
+    // نرخ مؤثر همان نرخ اختصاصی رده است، نه نرخ سراسری طرح
+    const rate = tierRate(maxRatioTier, sample.config);
+    assert.equal(rate, 0, 'the top waiting rung ships without a fee');
+    expectClose(offer.monthlyPayment, calcPmt('qard', 225_000_000, 12, rate));
+    assert.ok(Math.abs(offer.totalRepayment - 225_000_000) < 1e-6);
+    assert.ok(Math.abs(offer.totalCharge) < 1e-6);
   });
 
   it('applies the individual loan cap after calculating the raw eligible amount', () => {

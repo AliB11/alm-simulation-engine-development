@@ -22,11 +22,12 @@ import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
 import { PRESETS, tierColor } from '../lib/presets';
-import { fmtRaw } from '../lib/format';
+import { fmtRaw, toFa } from '../lib/format';
 import { TIER_WAIT_MAX } from '../lib/limits';
 import { TierBuilder } from './TierBuilder';
 import { OptimizerResultTable, OptimizerSummary, resultHeadline } from './OptimizerPanel';
 import { DEFAULT_CONSTRAINTS, designTiers, optimizeDesign } from '../lib/optimizer';
+import { isNegligible, runTornado } from '../lib/tornado';
 
 /**
  * آزمون دود (smoke) رابط کاربری.
@@ -61,8 +62,8 @@ suite('UI smoke — server render of every section', () => {
     const html = render(<App />);
     assert.ok(html.length > 50_000, `unexpectedly small document: ${html.length}`);
     assert.ok(html.includes('نمونه طرح اول'), 'the new default profile should be visible');
-    assert.ok(html.includes('نمونه طرح سوم'), 'the revised third sample should remain available');
-    assert.ok(!html.includes('نمونه طرح دوم'), 'the deleted second sample must not render');
+    assert.ok(html.includes('نمونه طرح دوم'), 'the murabaha sample keeps its renumbered label');
+    assert.ok(!html.includes('نمونه طرح سوم'), 'the old «third sample» label must be gone for good');
     assertNoBrokenNumbers(html, 'App');
     for (const heading of [
       'تنظیمات کلان محصول',
@@ -121,21 +122,37 @@ suite('UI smoke — server render of every section', () => {
     }
   });
 
-  test('customer calculator supports the 18-month wait and all Negin repayment options', () => {
+  test('customer calculator offers every waiting rung of the sample and the terms that rung defines', () => {
+    /* طرح نمونه اول شش ردهٔ انتظار پله‌ای دارد (۱ تا ۱۸ ماه) و هر رده یک دورهٔ
+       بازپرداخت مشخص؛ پس محاسبه‌گر باید همهٔ رده‌ها را پیشنهاد بدهد و برای هر
+       رده دقیقاً همان اقساط تعریف‌شده را نشان دهد — نه بیشتر و نه کمتر. */
     const input = presetInput('sample-1');
-    const maxWaitTiers = input.tiers.filter((tier) => tier.tDep === 18);
-    const html = render(<CustomerCalculator tiers={maxWaitTiers} config={input.config} />);
-    assert.match(html, /<option value="18"[^>]*>۱۸ ماه<\/option>/, 'the 18-month waiting option must be selectable');
+    const html = render(<CustomerCalculator tiers={input.tiers} config={input.config} />);
+    const waits = [...new Set(input.tiers.map((tier) => Math.round(tier.tDep)))].sort((a, b) => a - b);
+    assert.deepEqual(waits, [1, 3, 6, 9, 12, 18], 'the sample must spread its waiting periods across the whole range');
+    for (const wait of waits) {
+      assert.match(html, new RegExp(`<option value="${wait}"[^>]*>${toFa(wait)} ماه<\\/option>`), `missing ${wait}-month waiting rung`);
+    }
     for (const months of [12, 24, 36, 48, 60]) {
-      assert.match(
-        html,
-        new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} قسط<\\/option>`),
-        `missing ${months}-month installment option`,
+      assert.ok(
+        input.tiers.some((tier) => tier.tLoan === months),
+        `no rung offers the published ${months}-month installment`,
       );
     }
+    // پیش‌فرض ۴ ماه در این رده‌ها نیست، پس نزدیک‌ترین رده (۳ ماه) انتخاب می‌شود
+    assert.match(html, /<option value="3" selected="">۳ ماه<\/option>/, 'the calculator must fall back to the nearest rung');
+    const top = input.tiers.filter((tier) => tier.tDep === 18);
+    assert.equal(top.length, 1, 'the longest waiting rung must be unique');
+    const topHtml = render(<CustomerCalculator tiers={top} config={input.config} />);
+    assert.match(topHtml, /<option value="18"[^>]*>۱۸ ماه<\/option>/, 'the 18-month waiting option must be selectable');
+    assert.match(
+      topHtml,
+      new RegExp(`<option value="${top[0].tLoan}"[^>]*>${fmtRaw(top[0].tLoan)} قسط<\\/option>`),
+      'the longest waiting rung must expose its own installment term',
+    );
   });
 
-  test('sample plan three exposes every report rate in an enabled, editable rate field', () => {
+  test('sample plan two exposes every report rate in an enabled, editable rate field', () => {
     const input = presetInput('sample-3');
     const result = simulate(input, true);
     const html = render(
@@ -333,6 +350,109 @@ suite('UI smoke — server render of every section', () => {
         `${file} is never imported — either mount it in the layout or delete it`,
       );
     }
+  });
+
+  test('every data table carries an accessible name', () => {
+    /* یازده جدول داده‌ای در داشبورد وجود دارد؛ بدون <caption> یا aria-label
+       هیچ‌کدام برای صفحه‌خوان نام مشخصی ندارند و کاربر باید حدس بزند کدام
+       جدول را می‌خواند. نام‌ها بصری پنهان‌اند ولی برای فناوری کمکی خوانده
+       می‌شوند. این نگهبان هم منبع را می‌پاید و هم خروجی رندرشده را. */
+    const files = readdirSync(new URL('.', import.meta.url)).filter(
+      (f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx'),
+    );
+    let tables = 0;
+    for (const file of files) {
+      const code = readFileSync(new URL(file, import.meta.url), 'utf8');
+      const opens = code.match(/<table[\s>]/g) ?? [];
+      const named = code.match(/<table[^>]*>\s*<caption/g) ?? [];
+      assert.equal(
+        named.length,
+        opens.length,
+        `${file}: ${opens.length - named.length} table(s) without an accessible name`,
+      );
+      tables += opens.length;
+    }
+    assert.ok(tables >= 10, `expected the dashboard tables to exist, found ${tables}`);
+    const html = render(<App />);
+    assert.ok(html.includes('<caption class="sr-only">'), 'captions must survive the render');
+  });
+
+  test('never ships a raw \\uXXXX escape or a minus-sign typo in the copy', () => {
+    // رگرسیون: در مقدار رشته‌ای JSX فرار `\uXXXX` پردازش نمی‌شود؛ فرمول کارت
+    // «حداکثر کسری» پیش‌تر به‌صورت متن خام «\u2212min(...)» چاپ می‌شد.
+    const html = render(<App />);
+    assert.ok(!html.includes('u2212'), 'a raw escape leaked into the rendered markup');
+    assert.ok(html.includes('−min(0, min CumLiq_t)'), 'the hole formula must use the real minus sign');
+  });
+
+  test('the skip link precedes the header so it is the first focus target', () => {
+    const html = render(<App />);
+    const skip = html.indexOf('پرش به محتوای اصلی');
+    const header = html.indexOf('<header');
+    assert.ok(skip >= 0, 'the skip link is missing');
+    assert.ok(header > skip, 'the skip link must come before the header in the tab order');
+    assert.ok(html.indexOf('href="#config"') > -1 && html.indexOf('href="#config"') < header);
+  });
+
+  test('segmented controls expose their pressed state to assistive tech', () => {
+    const html = render(<App />);
+    assert.ok(html.includes('role="group"'), 'segmented controls need a group role');
+    assert.ok(html.includes('aria-pressed="true"') && html.includes('aria-pressed="false"'));
+  });
+
+  test('info tips describe their trigger and render as a tooltip', () => {
+    const input = presetInput('sample-1');
+    const html = render(<GlobalConfigPanel config={input.config} onChange={() => {}} />);
+    assert.ok(html.includes('aria-describedby'), 'the info triggers must be described');
+    assert.ok(html.includes('role="tooltip"'));
+  });
+
+  test('the tornado table dims exactly the drivers the negligible rule flags', () => {
+    /* دیم‌بودن هر ردیف باید با همان قاعدهٔ `isNegligible` بخواند؛ وگرنه رنگ
+       جدول و برچسب «کم‌اثر» می‌توانند از هم جدا بیفتند. */
+    const expectDimming = (input: ReturnType<typeof presetInput>, someImmaterial: boolean) => {
+      const { base, bars } = runTornado(input, 'maxHole');
+      const totalSwing = bars.reduce((sum, bar) => sum + bar.swing, 0);
+      const html = render(<TornadoPanel input={input} />);
+      const body = html.split('<tbody>')[1]?.split('</tbody>')[0] ?? '';
+      const rows = body.split('<tr').slice(1);
+      assert.equal(rows.length, bars.length, 'every driver must have exactly one table row');
+      let dimmed = 0;
+      for (const bar of bars) {
+        const row = rows.find((candidate) => candidate.includes(bar.label));
+        assert.ok(row, `row missing for «${bar.label}»`);
+        const expected = isNegligible(bar, base, totalSwing);
+        assert.equal(row!.includes('opacity-50'), expected, `«${bar.label}»: the dimming disagrees with the negligible rule`);
+        if (expected) dimmed += 1;
+      }
+      if (someImmaterial) {
+        assert.ok(dimmed > 0, 'a portfolio without product tiers must leave immaterial drivers dimmed');
+        assert.ok(dimmed < bars.length, 'a driver that still moves the hole must stay legible');
+      } else {
+        assert.equal(dimmed, 0, 'no lever of the shipped profile is immaterial any more');
+      }
+    };
+    expectDimming(presetInput('sample-1'), false);
+    expectDimming({ ...presetInput('sample-1'), tiers: [] }, true);
+  });
+
+  test('an infinite exit leverage is shown as ∞ in the comparison table', () => {
+    const input = presetInput('sample-1');
+    const squeezed = { ...input, config: { ...input.config, reserveRatio: 100 } };
+    const result = simulate(squeezed, true);
+    assert.equal(result.kpis.leverage, Infinity);
+    const html = render(
+      <ScenarioCompare
+        kpis={result.kpis}
+        currentRows={result.rows}
+        slots={{ A: snapshotSlot('A', squeezed, result.kpis, 'بافر صفر'), B: null, C: null }}
+        onSnapshot={() => {}}
+        onLoad={() => {}}
+        onClear={() => {}}
+        onRename={() => {}}
+      />,
+    );
+    assert.ok(html.includes('∞×'), 'the table must surface the infinite leverage instead of hiding it');
   });
 
   test('renders an empty portfolio and an out-of-horizon design without breaking', () => {

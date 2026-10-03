@@ -44,3 +44,17 @@ export function bucketCountFor(rowCount: number, size: number): number {
   const s = Math.max(1, Math.round(finite(size, 1)));
   return n > 0 ? Math.ceil(n / s) : 0;
 }
+
+/**
+ * برچسب یک سطل زمانی.
+ *
+ * سطل‌ها روی «اندیس ردیف» بریده می‌شوند، پس آخرین سطل یک افق غیرمضرب
+ * (مثلاً ۶۱ ردیف با سطل ۳ماهه) تنها یک ماه را پوشش می‌دهد؛ پیش‌تر برچسب
+ * چنین سطلی «۶۰–۶۰» چاپ می‌شد. قاعده اینجاست تا نردبان سررسید و نقشهٔ
+ * حرارتی هر دو یک برچسب بگیرند.
+ */
+export function bucketLabel(from: number, to: number): string {
+  const lo = Math.round(finite(from, 0));
+  const hi = Math.round(finite(to, lo));
+  return lo === hi ? `${lo}` : `${lo}–${hi}`;
+}
