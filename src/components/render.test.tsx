@@ -62,8 +62,8 @@ suite('UI smoke — server render of every section', () => {
     const html = render(<App />);
     assert.ok(html.length > 50_000, `unexpectedly small document: ${html.length}`);
     assert.ok(html.includes('نمونه طرح اول'), 'the new default profile should be visible');
-    assert.ok(html.includes('نمونه طرح سوم'), 'the revised third sample should remain available');
-    assert.ok(!html.includes('نمونه طرح دوم'), 'the deleted second sample must not render');
+    assert.ok(html.includes('نمونه طرح دوم'), 'the murabaha sample keeps its renumbered label');
+    assert.ok(!html.includes('نمونه طرح سوم'), 'the old «third sample» label must be gone for good');
     assertNoBrokenNumbers(html, 'App');
     for (const heading of [
       'تنظیمات کلان محصول',
@@ -152,7 +152,7 @@ suite('UI smoke — server render of every section', () => {
     );
   });
 
-  test('sample plan three exposes every report rate in an enabled, editable rate field', () => {
+  test('sample plan two exposes every report rate in an enabled, editable rate field', () => {
     const input = presetInput('sample-3');
     const result = simulate(input, true);
     const html = render(
