@@ -60,24 +60,17 @@ describe('customer loan estimate', () => {
     minBalance: 1_000_000,
   };
 
-  it('estimates the Negin Omid Zarin sample maximum-ratio option with the configured Qard formula and individual cap', () => {
+  it('estimates the Negin Omid Zarin sample maximum-ratio option with the configured Qard formula', () => {
     const sample = presetInput('sample-1');
-    const maxRatioTier = sample.tiers.find((candidate) => candidate.tDep === 18 && candidate.tLoan === 12 && candidate.alpha === 300);
-    assert.ok(maxRatioTier, 'the 2% fee matrix must include the 18-month / 12-installment, 300% boundary');
+    const maxRatioTier = sample.tiers.find((candidate) => candidate.tDep === 18 && candidate.tLoan === 12 && candidate.alpha === 225);
+    assert.ok(maxRatioTier, 'the Negin Omid Zarin sample must include the 18-month / 12-installment, 225% boundary');
     const offer = estimateTierOffer(maxRatioTier, sample.config, 100_000_000);
     assert.equal(offer.eligible, true);
-    assert.equal(offer.rawLoan, 300_000_000);
-    assert.equal(offer.loan, 300_000_000);
+    assert.equal(offer.loan, 225_000_000);
     assert.equal(offer.capped, false);
-    expectClose(offer.monthlyPayment, calcPmt('qard', 300_000_000, 12, 2));
-    assert.ok(Math.abs(offer.totalRepayment - 306_000_000) < 1e-6);
-    assert.ok(Math.abs(offer.totalCharge - 6_000_000) < 1e-6);
-
-    const fourPercent = { ...maxRatioTier, alpha: 360 };
-    const capped = estimateTierOffer(fourPercent, sample.config, 100_000_000);
-    assert.equal(capped.rawLoan, 360_000_000);
-    assert.equal(capped.loan, sample.config.loanCap);
-    assert.equal(capped.capped, true, 'the model applies its separate conservative 300-million individual cap');
+    expectClose(offer.monthlyPayment, calcPmt('qard', 225_000_000, 12, 2));
+    assert.ok(Math.abs(offer.totalRepayment - 229_500_000) < 1e-6);
+    assert.ok(Math.abs(offer.totalCharge - 4_500_000) < 1e-6);
   });
 
   it('applies the individual loan cap after calculating the raw eligible amount', () => {

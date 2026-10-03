@@ -66,13 +66,11 @@ export interface Preset {
   rateOptions?: readonly number[];
   /** گزینه‌های اقساطی که این الگو نمایش می‌دهد */
   repaymentTerms?: readonly number[];
-  /** سقف کل گزارش‌شدهٔ محصول برای نمایش اطلاع‌رسانی؛ محدودیت تجمیعی موتور نیست */
+  /** سقف کل اعلام‌شدهٔ محصول؛ ممکن است با سقف هر فرد تفاوت داشته باشد */
   programCap?: number;
   /** دامنه‌های نمایشی مشخصات همین الگو (به‌ترتیب: حداقل، حداکثر) */
   waitingRange?: PresetRange;
   alphaRange?: PresetRange;
-  /** ضریب برابری بر اساس کارمزد انتخاب‌شده؛ برای حالت‌های قرض‌الحسنهٔ نمونهٔ اول */
-  rateAlphaRanges?: Readonly<Record<number, PresetRange>>;
   tierRateRange?: PresetRange;
   /** نرخ سود پرداختی روی خود سپرده؛ صفر یعنی الگوی سپرده بدون سود */
   depositProfitRate: number;
@@ -82,67 +80,34 @@ export interface Preset {
 const SAMPLE_ONE_REPAYMENT_TERMS = [12, 24, 36, 48, 60] as const;
 const SAMPLE_THREE_REPAYMENT_TERMS = [16, 24, 32, 40, 48, 56, 60] as const;
 
-/** ضریب مقیاسِ نسبت تسهیلات به میانگین سپرده در کارمزدهای منتشرشده */
-const SAMPLE_ONE_ALPHA_FACTORS: Readonly<Record<number, number>> = { 0: 150, 2: 200, 4: 240 };
-const SAMPLE_ONE_ALPHA_RANGES: Readonly<Record<number, PresetRange>> = {
-  0: [2.5, 225],
-  2: [3.33, 300],
-  4: [4, 360],
-};
-
-/**
- * بازسازی ضریب هر حالت از دامنه‌های گزارش‌شدهٔ طرح:
- * α(٪) = ضریبِ کارمزد × ماه انتظار ÷ ماه بازپرداخت.
- * مقادیر تا دو رقم اعشار گرد می‌شوند؛ جدول کاملِ قرارداد بانک در دسترس نیست.
- */
-export function sampleOneAlpha(waitingMonths: number, repaymentMonths: number, feeRate: number): number {
-  const factor = SAMPLE_ONE_ALPHA_FACTORS[feeRate] ?? SAMPLE_ONE_ALPHA_FACTORS[2];
-  const wait = Number.isFinite(waitingMonths) ? Math.max(0, waitingMonths) : 0;
-  const term = Number.isFinite(repaymentMonths) ? Math.max(1, repaymentMonths) : 1;
-  return Math.round(((factor * wait) / term) * 100) / 100;
-}
-
-function sampleOneTiers(feeRate: number): Omit<Tier, 'id'>[] {
-  const allocation = 100 / (18 * SAMPLE_ONE_REPAYMENT_TERMS.length);
-  const tiers: Omit<Tier, 'id'>[] = [];
-  for (let waiting = 1; waiting <= 18; waiting++) {
-    for (const repayment of SAMPLE_ONE_REPAYMENT_TERMS) {
-      tiers.push({
-        name: tierLabel(tiers.length),
-        tDep: waiting,
-        tLoan: repayment,
-        alpha: sampleOneAlpha(waiting, repayment, feeRate),
-        minBalance: 0,
-        allocation,
-        rateOverride: null,
-      });
-    }
-  }
-  return tiers;
-}
-
 /**
  * دو الگوی قابل‌ویرایش برای شروع طراحی محصول.
- * طرح اول همهٔ ۹۰ جفتِ دورهٔ انتظار/بازپرداخت را نگه می‌دارد؛ نسبت‌ها از دامنه‌های
- * گزارش‌شده بازسازی شده‌اند و تخصیص برابر صرفاً پیش‌فرض شبیه‌سازی است.
+ * اعدادِ طرح نگین امید زرین بر پایهٔ شرایط عمومی منتشرشده چیده شده‌اند؛
+ * تخصیص‌ها و جفت‌کردن هر پله با یک دوره، فرض‌های شبیه‌سازی‌اند نه قرارداد بانک.
  */
 export const PRESETS: Preset[] = [
   {
     key: 'sample-1',
     name: 'نمونه طرح اول',
     description:
-      'نگین امید زرین: ۹۰ حالتِ ۱۸ دوره انتظار × ۵ دوره بازپرداخت؛ کارمزد ۰/۲/۴٪ و ضریب وابسته به کارمزد (به‌ترتیب دامنهٔ ۲٫۵–۲۲۵، ۳٫۳۳–۳۰۰ و ۴–۳۶۰٪). تخصیص برابر فقط فرض آغازین شبیه‌سازی است، نه سهم رسمی هر حالت.',
+      'قرض‌الحسنه با کارمزد انتخابی ۰، ۲ یا ۴٪؛ انتظار ۱ تا ۱۸ ماه، اقساط ۱۲/۲۴/۳۶/۴۸/۶۰ ماه و ضریب برابری ۲٫۵٪ تا ۲۲۵٪. سقف کل اعلامی ۱ میلیارد تومان است؛ چون منابع درباره سقف فردی اختلاف دارند، مدل به‌طور محافظه‌کارانه ۳۰۰ میلیون می‌گیرد. ضرایب و سهم‌ها آموزشی‌اند.',
     contractType: 'qard',
     rate: 2,
     rateOptions: [0, 2, 4],
     repaymentTerms: SAMPLE_ONE_REPAYMENT_TERMS,
     waitingRange: [1, 18],
-    alphaRange: SAMPLE_ONE_ALPHA_RANGES[2],
-    rateAlphaRanges: SAMPLE_ONE_ALPHA_RANGES,
+    alphaRange: [2.5, 225],
     programCap: 1_000_000_000,
     loanCap: 300_000_000,
     depositProfitRate: 0,
-    tiers: sampleOneTiers(2),
+    tiers: [
+      { name: tierLabel(0), tDep: 1, tLoan: 12, alpha: 2.5, minBalance: 0, allocation: 60, rateOverride: null },
+      { name: tierLabel(1), tDep: 18, tLoan: 12, alpha: 225, minBalance: 0, allocation: 3, rateOverride: null },
+      { name: tierLabel(2), tDep: 18, tLoan: 24, alpha: 112.5, minBalance: 0, allocation: 10, rateOverride: null },
+      { name: tierLabel(3), tDep: 18, tLoan: 36, alpha: 75, minBalance: 0, allocation: 12, rateOverride: null },
+      { name: tierLabel(4), tDep: 18, tLoan: 48, alpha: 56.25, minBalance: 0, allocation: 9, rateOverride: null },
+      { name: tierLabel(5), tDep: 18, tLoan: 60, alpha: 45, minBalance: 0, allocation: 6, rateOverride: null },
+    ],
   },
   {
     key: 'sample-3',
@@ -172,10 +137,9 @@ export const PRESETS: Preset[] = [
 /** نمونهٔ اول، الگوی شروع و طرح پیش‌فرض برنامه است. */
 export const DEFAULT_PRESET = 'sample-1';
 
-export function presetTiers(key: string, qardFeeRate?: number): Tier[] {
+export function presetTiers(key: string): Tier[] {
   const p = PRESETS.find((x) => x.key === key) ?? PRESETS[0];
-  const source = p.key === 'sample-1' ? sampleOneTiers(qardFeeRate ?? p.rate) : p.tiers;
-  return labelTiers(source.map((t) => ({ ...t, id: uid() })));
+  return labelTiers(p.tiers.map((t) => ({ ...t, id: uid() })));
 }
 
 export const DEFAULT_CONFIG: GlobalConfig = {

@@ -22,8 +22,6 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
   const allocSum = tiers.reduce((s, t) => s + Math.max(0, t.allocation || 0), 0);
   const allocOk = Math.abs(allocSum - 100) < 0.05;
   const activePresetDetails = PRESETS.find((preset) => preset.key === activePreset);
-  const activeRate = config.contractType === 'qard' ? config.qardFeeRate : config.murabahaRate;
-  const activeAlphaRange = activePresetDetails?.rateAlphaRanges?.[activeRate] ?? activePresetDetails?.alphaRange;
   const waitMin = activePresetDetails?.waitingRange?.[0] ?? TIER_WAIT_MIN;
   const waitMax = activePresetDetails?.waitingRange?.[1] ?? TIER_WAIT_MAX;
   const repaymentMin = activePresetDetails?.repaymentTerms
@@ -32,8 +30,8 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
   const repaymentMax = activePresetDetails?.repaymentTerms
     ? Math.max(...activePresetDetails.repaymentTerms)
     : 60;
-  const alphaMin = activeAlphaRange?.[0] ?? TIER_ALPHA_MIN;
-  const alphaMax = activeAlphaRange?.[1] ?? TIER_ALPHA_MAX;
+  const alphaMin = activePresetDetails?.alphaRange?.[0] ?? TIER_ALPHA_MIN;
+  const alphaMax = activePresetDetails?.alphaRange?.[1] ?? TIER_ALPHA_MAX;
   const rateMin = activePresetDetails?.tierRateRange?.[0] ?? 0;
   const rateMax = activePresetDetails?.tierRateRange?.[1] ?? (activePresetDetails?.rateOptions?.at(-1) ?? 60);
   const gRate = globalRate(config);
@@ -115,7 +113,6 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
         {PRESETS.map((p) => {
           const active = activePreset === p.key;
           const displayedRate = active ? (p.contractType === 'qard' ? config.qardFeeRate : config.murabahaRate) : p.rate;
-          const displayedAlphaRange = p.rateAlphaRanges?.[displayedRate] ?? p.alphaRange;
           return (
             <button
               key={p.key}
@@ -142,7 +139,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                 </Badge>
                 <Badge>{toFa(p.tiers.length)} حالت</Badge>
                 <Badge>سقف فردی {fmtNumber(p.loanCap / 1e6)} میلیون</Badge>
-                {p.programCap && <Badge>سقف گزارش‌شدهٔ طرح {fmtNumber(p.programCap / 1e6)} میلیون</Badge>}
+                {p.programCap && <Badge>سقف کل طرح {fmtNumber(p.programCap / 1e6)} میلیون</Badge>}
                 {p.waitingRange && (
                   <Badge>
                     انتظار {toFa(p.waitingRange[0])}–{toFa(p.waitingRange[1])} ماه
@@ -151,9 +148,9 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                 {p.repaymentTerms && (
                   <Badge>اقساط {p.repaymentTerms.map((months) => toFa(months)).join('، ')}</Badge>
                 )}
-                {displayedAlphaRange && (
+                {p.alphaRange && (
                   <Badge>
-                    ضریب {fmtPct(displayedAlphaRange[0], 2)}–{fmtPct(displayedAlphaRange[1], 2)}
+                    ضریب {fmtPct(p.alphaRange[0], 1)}–{fmtPct(p.alphaRange[1], 1)}
                   </Badge>
                 )}
                 {p.tierRateRange && (
@@ -170,21 +167,6 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
           );
         })}
       </div>
-
-      {activePreset === 'sample-1' && (
-        <div className="mx-5 mt-3 rounded-xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-[11.5px] leading-6 text-sky-950 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-100">
-          <div className="font-extrabold">ماتریس حالت‌های نگین امید زرین</div>
-          <div>
-            ۱۸ دورهٔ انتظار × ۵ دورهٔ بازپرداخت = ۹۰ حالت. ضریب این الگو از دامنه‌های منتشرشده بازسازی شده است:{' '}
-            <span dir="ltr" className="font-mono">α(٪) = k × T_dep / T_loan</span>؛ مقدار <b>k</b> برای کارمزد ۰/۲/۴٪ به‌ترتیب
-            ۱۵۰/۲۰۰/۲۴۰ است.
-          </div>
-          <div className="text-sky-800 dark:text-sky-200">
-            سهم آغازین هر حالت {fmtPct(100 / Math.max(1, tiers.length), 2)} است تا موتور بتواند سبد را اجرا کند؛ چون ترکیب واقعی
-            مشتریان منتشر نشده، این سهم صرفاً فرض آموزشی و قابل‌ویرایش است، نه سهم رسمی بانک.
-          </div>
-        </div>
-      )}
 
       {/* Table */}
       <div className="alm-scroll overflow-x-auto px-5 pb-3 pt-3">
@@ -288,8 +270,8 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                       value={t.alpha}
                       min={alphaMin}
                       max={alphaMax}
-                      step={0.1}
-                      decimals={2}
+                      step={5}
+                      decimals={1}
                       onChange={(v) => update(t.id, { alpha: v })}
                       suffix="٪"
                       className="w-[92px]"
@@ -365,7 +347,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
                     <div className="flex flex-col items-start gap-1">
                       <span className="font-bold text-slate-800 dark:text-slate-100">
-                        {fmtPct((r?.alphaEff ?? t.alpha / 100) * 100, 2)}
+                        {fmtPct((r?.alphaEff ?? t.alpha / 100) * 100, 1)}
                       </span>
                       {r?.capBinding ? (
                         <Badge tone="amber">
