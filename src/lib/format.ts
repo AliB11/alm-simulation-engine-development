@@ -44,6 +44,27 @@ export function fmtPct(n: number, decimals = 1, fixed = false): string {
 }
 
 /**
+ * تعداد اعشارِ لازم تا یک مقدار غیرصفر با گرد‌کردن به «صفر» نمایش داده نشود.
+ * نرخ‌های بسیار کوچک — مانند سود علی‌الحساب ۰٫۰۱٪ روی سپردهٔ ویژهٔ نگین فراپویا —
+ * با یک رقم اعشار «۰٫۰٪» نوشته می‌شدند، یعنی کاربر نرخ فعال را صفر می‌دید در حالی که
+ * موتور همان ۰٫۰۱٪ را در جریان نقد لحاظ می‌کرد.
+ */
+export function minDigitsFor(value: number, minDigits = 1, maxDigits = 4): number {
+  const a = Math.abs(Number.isFinite(value) ? value : 0);
+  const floor = Math.max(0, Math.round(Number.isFinite(minDigits) ? minDigits : 0));
+  const cap = Math.max(floor, Math.round(Number.isFinite(maxDigits) ? maxDigits : floor));
+  if (!(a > 0)) return floor;
+  let digits = floor;
+  while (digits < cap && a < 0.5 * Math.pow(10, -digits)) digits += 1;
+  return digits;
+}
+
+/** درصد با اعشار تطبیقی — اعشارِ نرخ‌های کوچک به‌طور خودکار افزایش می‌یابد */
+export function fmtPctAuto(value: number, minDigits = 1, maxDigits = 4): string {
+  return fmtPct(value, minDigitsFor(value, minDigits, maxDigits));
+}
+
+/**
  * قالب ضریب/نسبت (مانند اهرم خروج) که مخرجش می‌تواند صفر شود.
  * بی‌نهایت به‌صورت «∞» و مقدار نامعریف به‌صورت «—» نمایش داده می‌شود.
  */

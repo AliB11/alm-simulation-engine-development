@@ -17,6 +17,7 @@ export function presetInput(key: string): SimInput {
     contractType: p.contractType,
     ...(p.contractType === 'qard' ? { qardFeeRate: p.rate } : { murabahaRate: p.rate }),
     loanCap: p.loanCap,
+    minLoan: p.minLoan ?? 0,
     depositProfitRate: p.depositProfitRate,
   };
   return { config, tiers, behavior: DEFAULT_BEHAVIOR, schedule: DEFAULT_SCHEDULE };

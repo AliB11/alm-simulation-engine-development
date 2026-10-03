@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { DEFAULT_CONFIG, DEFAULT_PRESET, labelTiers, presetTiers, PRESETS, sampleOneAlpha, tierLabel } from './presets';
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_PRESET,
+  FARAPOUYA,
+  FARAPOUYA_ALPHA_STEPS,
+  FARAPOUYA_RATE_STEPS,
+  farapouyaAlpha,
+  farapouyaFeasible,
+  farapouyaMode,
+  farapouyaModes,
+  farapouyaPoints,
+  farapouyaRate,
+  farapouyaTermCeiling,
+  farapouyaTermPoints,
+  labelTiers,
+  presetTiers,
+  PRESETS,
+  sampleOneAlpha,
+  tierLabel,
+} from './presets';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
 import { IMPORT_RATE_MAX, TIER_ALPHA_MAX, TIER_WAIT_MAX, TIER_WAIT_MIN } from './limits';
@@ -19,18 +38,24 @@ const makeTier = (id: string, name: string): Tier => ({
 });
 
 const sampleOne = PRESETS.find((preset) => preset.key === 'sample-1');
-const sampleThree = PRESETS.find((preset) => preset.key === 'sample-3');
+/* کلید داخلیِ الگوی دوم همچنان `sample-3` است (تا سناریوهای ذخیره‌شده نشکنند)،
+   اما برچسب فارسی آن «نمونه طرح دوم» و محتوایش حالت‌های نگین فراپویا است. */
+const sampleTwo = PRESETS.find((preset) => preset.key === 'sample-3');
 assert.ok(sampleOne);
-assert.ok(sampleThree);
+assert.ok(sampleTwo);
 
 describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
-  it('is the default profile and replaces the removed second sample', () => {
+  it('is the default profile and ships beside the relabelled second sample', () => {
     assert.equal(DEFAULT_PRESET, 'sample-1');
     assert.deepEqual(
       PRESETS.map((preset) => preset.key),
       ['sample-1', 'sample-3'],
     );
-    assert.equal(PRESETS.some((preset) => preset.name.includes('نمونه طرح دوم')), false);
+    assert.deepEqual(
+      PRESETS.map((preset) => preset.name),
+      ['نمونه طرح اول', 'نمونه طرح دوم'],
+    );
+    assert.equal(PRESETS.some((preset) => preset.name.includes('طرح سوم')), false, 'the third-plan label is gone');
   });
 
   it('matches the published loan type, fee choices, ceiling and tenor options without changing the product label', () => {
@@ -88,46 +113,149 @@ describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
   });
 });
 
-describe('sample plan three', () => {
-  it('ships exactly the requested waiting, installment, multiplier and rate ranges', () => {
-    const terms = [16, 24, 32, 40, 48, 56, 60];
-    assert.equal(sampleThree.contractType, 'murabaha');
-    assert.equal(sampleThree.tiers.length, terms.length);
-    assert.deepEqual(sampleThree.waitingRange, [2, 12]);
-    assert.deepEqual(sampleThree.repaymentTerms, terms);
-    assert.deepEqual(sampleThree.alphaRange, [25, 200]);
-    assert.deepEqual(sampleThree.tierRateRange, [5, 23]);
-    assert.deepEqual(
-      sampleThree.tiers.map((tier) => tier.tLoan),
-      terms,
-    );
-    assert.deepEqual(
-      sampleThree.tiers.map((tier) => tier.rateOverride),
-      [5, 8, 11, 14, 17, 20, 23],
-    );
-    assert.equal(Math.min(...sampleThree.tiers.map((tier) => tier.tDep)), 2);
-    assert.equal(Math.max(...sampleThree.tiers.map((tier) => tier.tDep)), 12);
-    assert.equal(Math.min(...sampleThree.tiers.map((tier) => tier.alpha)), 25);
-    assert.equal(Math.max(...sampleThree.tiers.map((tier) => tier.alpha)), 200);
-    assert.ok(Math.abs(sampleThree.tiers.reduce((sum, tier) => sum + tier.allocation, 0) - 100) < 1e-9);
+describe('sample plan two — Negin Farapouya, Bank Sepah', () => {
+  const terms: number[] = [...FARAPOUYA.terms];
+
+  it('is labelled «نمونه طرح دوم» and carries the published product parameters', () => {
+    assert.equal(sampleTwo.name, 'نمونه طرح دوم');
+    assert.equal(sampleTwo.contractType, 'murabaha');
+    assert.equal(sampleTwo.rate, FARAPOUYA.rateBase, 'the base rate at the minimum waiting period');
+    assert.deepEqual(sampleTwo.waitingRange, [FARAPOUYA.minWait, FARAPOUYA.maxWait]);
+    assert.deepEqual(sampleTwo.repaymentTerms, [16, 24, 32, 40, 48, 56, 60]);
+    assert.deepEqual(sampleTwo.alphaRange, [FARAPOUYA.alphaBase, FARAPOUYA.alphaCap]);
+    assert.deepEqual(sampleTwo.tierRateRange, [FARAPOUYA.rateFloor, FARAPOUYA.rateBase]);
+    assert.equal(sampleTwo.loanCap, 400_000_000, 'published individual ceiling: 4 billion rial');
+    assert.equal(sampleTwo.minLoan, 10_000_000, 'published minimum facility: 100 million rial');
+    assert.equal(sampleTwo.depositProfitRate, 0.01, 'the special short-term account pays 0.01%');
+    assert.equal(sampleTwo.programCap, undefined, 'no aggregate programme ceiling is published for this product');
+    assert.ok(sampleTwo.tiers.every((tier) => tier.minBalance === FARAPOUYA.minBalance));
   });
 
-  it('is a monotone ladder in waiting time, repayment term, rate and alpha', () => {
-    const rising = (values: number[]) => values.every((value, index) => index === 0 || value > values[index - 1]);
-    assert.ok(rising(sampleThree.tiers.map((tier) => tier.tDep)));
-    assert.ok(rising(sampleThree.tiers.map((tier) => tier.tLoan)));
-    assert.ok(rising(sampleThree.tiers.map((tier) => tier.rateOverride as number)));
-    assert.ok(rising(sampleThree.tiers.map((tier) => tier.alpha)));
-    assert.equal(sampleThree.tiers[0].tDep, 2);
-    assert.equal(sampleThree.tiers[0].tLoan, 16);
-    assert.equal(sampleThree.tiers[0].rateOverride, 5);
-    assert.equal(sampleThree.tiers.at(-1)?.tDep, 12);
-    assert.equal(sampleThree.tiers.at(-1)?.tLoan, 60);
-    assert.equal(sampleThree.tiers.at(-1)?.rateOverride, 23);
+  it('rebuilds the benefit-point rule of the product', () => {
+    // هر ماه انتظار بیشتر از حداقلِ ۲ ماه = یک امتیاز
+    assert.equal(farapouyaPoints(2), 0);
+    assert.equal(farapouyaPoints(12), 10);
+    // اقساط بالاتر از سقف پایه (۴۸ ماه) امتیاز مصرف می‌کند: ۵۶ ← ۱ و ۶۰ ← ۲
+    assert.equal(farapouyaTermPoints(16), 0);
+    assert.equal(farapouyaTermPoints(48), 0);
+    assert.equal(farapouyaTermPoints(56), 1);
+    assert.equal(farapouyaTermPoints(60), 2);
+    // سقف اقساط با انتظار بالا می‌رود و در ۶۰ ماه متوقف می‌شود
+    assert.equal(farapouyaTermCeiling(2), 48);
+    assert.equal(farapouyaTermCeiling(3), 56);
+    assert.equal(farapouyaTermCeiling(4), 60);
+    assert.equal(farapouyaTermCeiling(12), 60);
+    // اقساط بالاتر از ۴۸ فقط با انتظارِ بیش از ۲ ماه
+    assert.equal(farapouyaFeasible(2, 48), true);
+    assert.equal(farapouyaFeasible(2, 56), false);
+    assert.equal(farapouyaFeasible(2, 60), false);
+    assert.equal(farapouyaFeasible(3, 56), true);
+    assert.equal(farapouyaFeasible(3, 60), false);
+    assert.equal(farapouyaFeasible(4, 60), true);
+    // گام‌های لازم برای هر کران: ۹ گام تا نرخ ۵٪ و ۷ گام تا ضریب ۲۰۰٪
+    assert.equal(FARAPOUYA_RATE_STEPS, 9);
+    assert.equal(FARAPOUYA_ALPHA_STEPS, 7);
+    // حالت پایهٔ محصول در حداقل انتظار
+    const base = farapouyaMode(2, 16);
+    assert.equal(base.alpha, 25);
+    assert.equal(base.rate, 23);
+    assert.equal(base.freePoints, 0);
+  });
+
+  it('ships every feasible wait/term pair exactly once', () => {
+    const allPairs = (FARAPOUYA.maxWait - FARAPOUYA.minWait + 1) * terms.length;
+    assert.equal(sampleTwo.tiers.length, allPairs - 3, 'three of the 77 pairs break the installment rule');
+    assert.equal(sampleTwo.tiers.length, farapouyaModes().length);
+
+    const pairs = new Set(sampleTwo.tiers.map((tier) => `${tier.tDep}:${tier.tLoan}`));
+    assert.equal(pairs.size, sampleTwo.tiers.length, 'each waiting/term pair must occur exactly once');
+    assert.ok(sampleTwo.tiers.every((tier) => terms.includes(tier.tLoan)));
+    assert.ok(sampleTwo.tiers.every((tier) => tier.tDep >= FARAPOUYA.minWait && tier.tDep <= FARAPOUYA.maxWait));
+    assert.ok(sampleTwo.tiers.every((tier) => farapouyaFeasible(tier.tDep, tier.tLoan)));
+    assert.ok(sampleTwo.tiers.every((tier) => tier.tLoan <= farapouyaTermCeiling(tier.tDep)));
+    assert.equal(Math.min(...sampleTwo.tiers.map((tier) => tier.tDep)), 2);
+    assert.equal(Math.max(...sampleTwo.tiers.map((tier) => tier.tDep)), 12);
+    assert.ok(Math.abs(sampleTwo.tiers.reduce((sum, tier) => sum + tier.allocation, 0) - 100) < 1e-9);
+    assert.ok(sampleTwo.tiers.every((tier) => Math.abs(tier.allocation - 100 / sampleTwo.tiers.length) < 1e-9));
+  });
+
+  it('prices each mode from the reconstructed alpha and rate, inside the published ranges', () => {
+    for (const tier of sampleTwo.tiers) {
+      assert.equal(tier.alpha, farapouyaAlpha(tier.tDep, tier.tLoan), `${tier.name}: alpha`);
+      assert.equal(tier.rateOverride, farapouyaRate(tier.tDep, tier.tLoan), `${tier.name}: rate`);
+      assert.ok(tier.alpha >= FARAPOUYA.alphaBase && tier.alpha <= FARAPOUYA.alphaCap, `${tier.name}: alpha range`);
+      assert.ok(
+        (tier.rateOverride as number) >= FARAPOUYA.rateFloor && (tier.rateOverride as number) <= FARAPOUYA.rateBase,
+        `${tier.name}: rate range`,
+      );
+      // هر دو روی نردبان‌های اعلام‌شدهٔ محصول می‌نشینند (گام ۲۵٪ و گام ۲٪)
+      assert.equal((tier.alpha - FARAPOUYA.alphaBase) % FARAPOUYA.alphaStep, 0, `${tier.name}: alpha ladder`);
+      assert.equal((FARAPOUYA.rateBase - (tier.rateOverride as number)) % FARAPOUYA.rateStep, 0, `${tier.name}: rate ladder`);
+    }
+    assert.equal(Math.min(...sampleTwo.tiers.map((tier) => tier.alpha)), 25);
+    assert.equal(Math.max(...sampleTwo.tiers.map((tier) => tier.alpha)), 125);
+    assert.equal(Math.min(...sampleTwo.tiers.map((tier) => tier.rateOverride as number)), 11);
+    assert.equal(Math.max(...sampleTwo.tiers.map((tier) => tier.rateOverride as number)), 23);
+  });
+
+  it('moves alpha up and the rate down as the customer waits longer', () => {
+    for (const term of terms) {
+      const rows = sampleTwo.tiers.filter((tier) => tier.tLoan === term).sort((a, b) => a.tDep - b.tDep);
+      assert.ok(rows.length >= 5, `term ${term} must appear across the waiting ladder`);
+      const nonFalling = (values: number[]) => values.every((value, index) => index === 0 || value >= values[index - 1]);
+      assert.ok(nonFalling(rows.map((tier) => tier.alpha)), `alpha must not fall with waiting at term ${term}`);
+      assert.ok(
+        nonFalling(rows.map((tier) => tier.rateOverride as number).map((rate) => -rate)),
+        `the rate must not rise with waiting at term ${term}`,
+      );
+    }
+    // مصرف امتیاز برای اقساطِ بلندتر، از سهم ضریب/نرخ همان حالت کم می‌کند
+    for (const waiting of [4, 8, 12]) {
+      const rows = sampleTwo.tiers.filter((tier) => tier.tDep === waiting).sort((a, b) => a.tLoan - b.tLoan);
+      const shortest = rows[0];
+      const longest = rows[rows.length - 1];
+      assert.ok(longest.alpha <= shortest.alpha, `waiting ${waiting}: a longer term cannot raise alpha`);
+      assert.ok(
+        (longest.rateOverride as number) >= (shortest.rateOverride as number),
+        `waiting ${waiting}: a longer term cannot lower the rate`,
+      );
+    }
+  });
+
+  it('documents that the two published extremes cannot be bought together', () => {
+    // رسیدن هم‌زمان به ضریب ۲۰۰٪ و نرخ ۵٪ به ۱۶ امتیاز نیاز دارد؛ سقف انتظار ۱۲ ماه
+    // یعنی حداکثر ۱۰ امتیاز، پس هیچ حالتی هر دو کران را با هم ندارد.
+    assert.ok(FARAPOUYA_RATE_STEPS + FARAPOUYA_ALPHA_STEPS > farapouyaPoints(FARAPOUYA.maxWait));
+    assert.ok(
+      sampleTwo.tiers.every(
+        (tier) => tier.alpha < FARAPOUYA.alphaCap || (tier.rateOverride as number) > FARAPOUYA.rateFloor,
+      ),
+    );
+    // هر کران به‌تنهایی با صرفِ تمامِ امتیازها روی همان مزیت خریدنی است (۱۱ ماه انتظار
+    // برای کف نرخ و ۹ ماه برای سقف ضریب کافی است) — اما فقط با ویرایش دستیِ حالت،
+    // چون سیاست ترکیبیِ موتور امتیازها را بین دو مزیت تقسیم می‌کند.
+    assert.ok(FARAPOUYA_RATE_STEPS <= farapouyaPoints(11), 'nine points are affordable by waiting 11 months');
+    assert.ok(FARAPOUYA_ALPHA_STEPS <= farapouyaPoints(9), 'seven points are affordable by waiting 9 months');
+    assert.equal(
+      Math.max(FARAPOUYA.rateFloor, FARAPOUYA.rateBase - FARAPOUYA.rateStep * FARAPOUYA_RATE_STEPS),
+      FARAPOUYA.rateFloor,
+    );
+    assert.equal(
+      Math.min(FARAPOUYA.alphaCap, FARAPOUYA.alphaBase + FARAPOUYA.alphaStep * FARAPOUYA_ALPHA_STEPS),
+      FARAPOUYA.alphaCap,
+    );
+    assert.ok(sampleTwo.tiers.every((tier) => tier.alpha < FARAPOUYA.alphaCap), 'the combined policy never maxes alpha');
+    assert.ok(
+      sampleTwo.tiers.every((tier) => (tier.rateOverride as number) > FARAPOUYA.rateFloor),
+      'the combined policy never reaches the rate floor',
+    );
+    // کران‌های منتشرشده همچنان به‌عنوان دامنهٔ ویرایشِ الگو نگه داشته می‌شوند
+    assert.deepEqual(sampleTwo.alphaRange, [FARAPOUYA.alphaBase, FARAPOUYA.alphaCap]);
+    assert.deepEqual(sampleTwo.tierRateRange, [FARAPOUYA.rateFloor, FARAPOUYA.rateBase]);
   });
 
   it('keeps all tier values editable and inside the shared import/UI limits', () => {
-    for (const tier of sampleThree.tiers) {
+    for (const tier of sampleTwo.tiers) {
       assert.ok(tier.tDep >= TIER_WAIT_MIN && tier.tDep <= TIER_WAIT_MAX, `${tier.name}: waiting period out of range`);
       assert.ok(tier.tLoan >= 6 && tier.tLoan <= 60, `${tier.name}: repayment term out of range`);
       assert.ok(tier.alpha >= 0 && tier.alpha <= TIER_ALPHA_MAX, `${tier.name}: alpha out of range`);
@@ -137,12 +265,14 @@ describe('sample plan three', () => {
       );
       assert.ok(tier.allocation >= 0 && tier.allocation <= 100, `${tier.name}: allocation out of range`);
     }
+    assert.equal(presetTiers('sample-3').length, sampleTwo.tiers.length, 'loading the preset rebuilds the same matrix');
+    assert.ok(presetTiers('sample-3').every((tier) => tier.id.length > 0));
   });
 
   it('prices every step above the cost of funds and satisfies the shipped optimizer constraints', () => {
-    for (const tier of sampleThree.tiers) {
+    for (const tier of sampleTwo.tiers) {
       assert.ok(
-        (tier.rateOverride as number) > sampleThree.depositProfitRate,
+        (tier.rateOverride as number) > sampleTwo.depositProfitRate,
         `${tier.name}: the loan rate must cover the deposit rate`,
       );
     }
@@ -152,10 +282,12 @@ describe('sample plan three', () => {
     assert.ok(!DEFAULT_CONSTRAINTS.requirePositiveMargin || kpis.netMargin > 0, 'the default constraints demand a non-negative margin');
     assert.ok(kpis.netInterestIncome > 0, 'loan income must exceed the deposit profit paid');
     assert.ok(kpis.leverage <= 1.8, `leverage ${kpis.leverage.toFixed(4)} is too aggressive for a shipped sample`);
-    assert.ok(kpis.recoveryMonth !== null, 'sample three must recover before the horizon ends');
-    assert.ok((kpis.recoveryMonth as number) <= 40, 'sample three must recover well inside the horizon');
+    assert.ok(kpis.recoveryMonth !== null, 'sample two must recover before the horizon ends');
+    assert.ok((kpis.recoveryMonth as number) <= 40, 'sample two must recover well inside the horizon');
     assert.ok(kpis.deficitMonths <= 30, 'too many months spent in deficit');
-    assert.ok(kpis.endCum > 0, 'sample three must end the horizon with positive cumulative liquidity');
+    assert.ok(kpis.endCum > 0, 'sample two must end the horizon with positive cumulative liquidity');
+    assert.equal(kpis.commitmentsBeyondHorizon, 0, 'every maturity of this product fits inside the default horizon');
+    assert.ok(kpis.totalProfitPaid > 0, 'the 0.01% deposit profit must still reach the cash-flow matrix');
   });
 });
 

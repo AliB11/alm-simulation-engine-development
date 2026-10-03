@@ -11,6 +11,7 @@ const config: GlobalConfig = {
   murabahaRate: 21,
   reserveRatio: 0,
   loanCap: 0,
+  minLoan: 0,
   horizon: 12,
   initialLiquidity: 0,
   releaseReserve: false,
@@ -90,6 +91,19 @@ describe('customer loan estimate', () => {
 
   it('does not estimate a loan when the customer is below the tier minimum balance', () => {
     const offer = estimateTierOffer(fourMonthTier, config, 500_000);
+    assert.equal(offer.eligible, false);
+    assert.equal(offer.loan, 0);
+    assert.equal(offer.monthlyPayment, 0);
+  });
+
+  it('enforces the product minimum facility amount instead of inventing a sub-minimum loan', () => {
+    const farapouya = presetInput('sample-3');
+    const baseMode = farapouya.tiers.find((candidate) => candidate.tDep === 2 && candidate.tLoan === 16);
+    assert.ok(baseMode);
+    const offer = estimateTierOffer(baseMode, farapouya.config, 1_000_000);
+    assert.equal(offer.rawLoan, 250_000);
+    assert.equal(offer.minimumLoan, 10_000_000);
+    assert.equal(offer.belowMinimumLoan, true);
     assert.equal(offer.eligible, false);
     assert.equal(offer.loan, 0);
     assert.equal(offer.monthlyPayment, 0);
