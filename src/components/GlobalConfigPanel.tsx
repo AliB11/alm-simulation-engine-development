@@ -14,11 +14,9 @@ interface Props {
   rateOptions?: readonly number[];
   /** سقف کل برنامه، جدا از سقف فردی که موتور روی مشتری اعمال می‌کند. */
   programCap?: number;
-  /** حداقل مبلغ پرداختی محصول برای توضیح و برآورد مشتری */
-  programMinLoan?: number;
 }
 
-export function GlobalConfigPanel({ config, onChange, rateOptions, programCap, programMinLoan }: Props) {
+export function GlobalConfigPanel({ config, onChange, rateOptions, programCap }: Props) {
   const [advanced, setAdvanced] = useState(false);
   const { unit, factor } = useDisplay();
   const isQard = config.contractType === 'qard';
@@ -121,8 +119,8 @@ export function GlobalConfigPanel({ config, onChange, rateOptions, programCap, p
           className="xl:col-span-2"
           info={
             programCap
-              ? `این سقف فردیِ مدل است؛ سقف کلِ گزارش‌شدهٔ طرح تا ${fmtCompact(programCap * factor)} ${unit} صرفاً جهت اطلاع نمایش داده می‌شود و به‌عنوان محدودیت تجمیعی پرتفوی در موتور اعمال نمی‌شود. حداقل مبلغ پرداختی این الگو ${programMinLoan ? fmtCompact(programMinLoan * factor) : 'بدون کف'} ${unit} است؛ مبالغ خام پایین‌تر از آن در برآورد مشتری و موتور تعهد ایجاد نمی‌کنند. منابع درباره سقف هر متقاضی اختلاف دارند؛ این الگو به‌طور پیش‌فرض ۳۰۰ میلیون تومان را محافظه‌کارانه برای هر فرد اعمال می‌کند.`
-              : `سقف وام قابل پرداخت به هر فرد. ضریب مؤثر هر پله = min(α ، سقف ÷ مانده مبنا). مقدار صفر یعنی بدون سقف.${programMinLoan ? ` حداقل مبلغ پرداختی این الگو ${fmtCompact(programMinLoan * factor)} ${unit} است.` : ''}`
+              ? `این سقف فردیِ مدل است؛ سقف کلِ گزارش‌شدهٔ طرح تا ${fmtCompact(programCap * factor)} ${unit} صرفاً جهت اطلاع نمایش داده می‌شود و به‌عنوان محدودیت تجمیعی پرتفوی در موتور اعمال نمی‌شود. منابع درباره سقف هر متقاضی اختلاف دارند؛ این الگو به‌طور پیش‌فرض ۳۰۰ میلیون تومان را محافظه‌کارانه برای هر فرد اعمال می‌کند.`
+              : 'سقف وام قابل پرداخت به هر فرد. ضریب مؤثر هر پله = min(α ، سقف ÷ مانده مبنا). مقدار صفر یعنی بدون سقف.'
           }
           hint={config.loanCap > 0 ? `${fmtCompact(config.loanCap * factor)} ${unit}` : 'بدون سقف (۰)'}
         >

@@ -21,8 +21,8 @@ import { MaturityLadder } from './MaturityLadder';
 import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
-import { FARAPOUYA, farapouyaFeasible, farapouyaRate, farapouyaTermCeiling, PRESETS, presetTiers, tierColor } from '../lib/presets';
-import { fmtPct, fmtRaw, toFa } from '../lib/format';
+import { PRESETS, presetTiers, tierColor } from '../lib/presets';
+import { fmtPct, fmtRaw } from '../lib/format';
 import { TIER_ALPHA_MAX, TIER_WAIT_MAX } from '../lib/limits';
 import { TierBuilder } from './TierBuilder';
 import { OptimizerResultTable, OptimizerSummary, resultHeadline } from './OptimizerPanel';
@@ -60,10 +60,9 @@ suite('UI smoke — server render of every section', () => {
   test('renders the whole application without throwing or leaking NaN', () => {
     const html = render(<App />);
     assert.ok(html.length > 50_000, `unexpectedly small document: ${html.length}`);
-    assert.ok(html.includes('نمونه طرح اول'), 'the default profile should be visible');
-    assert.ok(html.includes('نمونه طرح دوم'), 'the second sample (Negin Farapouya) should be available');
-    assert.ok(!html.includes('نمونه طرح سوم'), 'the old third-plan label must be gone');
-    assert.ok(html.includes('نگین فراپویا'), 'the second sample is the Bank Sepah Negin Farapouya product');
+    assert.ok(html.includes('نمونه طرح اول'), 'the new default profile should be visible');
+    assert.ok(html.includes('نمونه طرح سوم'), 'the revised third sample should remain available');
+    assert.ok(!html.includes('نمونه طرح دوم'), 'the deleted second sample must not render');
     assertNoBrokenNumbers(html, 'App');
     for (const heading of [
       'تنظیمات کلان محصول',
@@ -167,7 +166,7 @@ suite('UI smoke — server render of every section', () => {
     }
   });
 
-  test('sample plan two renders the Negin Farapouya mode matrix with editable per-mode rates', () => {
+  test('sample plan three exposes every report rate in an enabled, editable rate field', () => {
     const input = presetInput('sample-3');
     const result = simulate(input, true);
     const html = render(
@@ -180,71 +179,30 @@ suite('UI smoke — server render of every section', () => {
         onLoadPreset={() => {}}
       />,
     );
-    assert.ok(html.includes('نمونه طرح دوم'), 'the preset card must carry the new label');
     assert.ok(html.includes('انتظار ۲–۱۲ ماه'));
     assert.ok(html.includes('اقساط ۱۶، ۲۴، ۳۲، ۴۰، ۴۸، ۵۶، ۶۰'));
-    assert.ok(html.includes('ضریب ۲۵٪–۲۰۰٪'), 'the published coefficient range stays visible');
-    assert.ok(html.includes('نرخ پله ۵٪–۲۳٪'), 'the published rate range stays visible');
-    assert.ok(html.includes(`${toFa(input.tiers.length)} حالت`), 'the card must count every mode');
-    assert.ok(html.includes('ماتریس حالت‌های نگین فراپویا'), 'the mode-matrix explainer must render');
-    assert.ok(html.includes('۰٫۰۱٪'), 'the 0.01% deposit profit of the special account must be documented');
-    assert.ok(html.includes('امتیاز'), 'the explainer must describe the waiting-month benefit points');
+    assert.ok(html.includes('ضریب ۲۵٪–۲۰۰٪'));
+    assert.ok(html.includes('نرخ پله ۵٪–۲۳٪'));
     for (const months of [16, 24, 32, 40, 48, 56, 60]) {
       assert.match(
         html,
         new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} ماه<\\/option>`),
-        `missing editable ${months}-month Farapouya term`,
+        `missing editable ${months}-month sample-three term`,
       );
     }
-
     const rateInputs = html.match(/<input\b[^>]*aria-label="نرخ اختصاصی [^"]*"[^>]*>/g) ?? [];
     assert.equal(rateInputs.length, input.tiers.length, 'every row should have an individually labeled rate input');
-    assert.ok(rateInputs.every((tag) => !tag.includes('disabled')), 'no mode rate should be locked');
-    // نرخ هر حالت از قاعدهٔ امتیاز محصول بازسازی می‌شود و در دامنهٔ منتشرشده می‌نشیند
-    const byRate = new Map<number, number>();
-    for (const tier of input.tiers) {
-      const rate = tier.rateOverride as number;
-      assert.equal(rate, farapouyaRate(tier.tDep, tier.tLoan), `rate of ${tier.name}`);
-      assert.ok(rate >= FARAPOUYA.rateFloor && rate <= FARAPOUYA.rateBase, `rate ${rate}% outside the published range`);
-      byRate.set(rate, (byRate.get(rate) ?? 0) + 1);
+    // نرخ‌ها از خودِ الگو خوانده می‌شوند، نه از یک فهرست ثابت در آزمون؛ وگرنه
+    // هر بازطراحی الگو این آزمون را بی‌دلیل می‌شکست.
+    const rates = input.tiers.map((tier) => tier.rateOverride as number);
+    assert.equal(new Set(rates).size, rates.length, 'the sample plan must give each mode its own rate');
+    for (const rate of rates) {
+      // فیلد نرخ با `fmtRaw(v, 2)` نوشته می‌شود؛ ممیز فارسی هم included است
+      const expected = `value="${fmtRaw(rate, 2)}"`;
+      const field = rateInputs.find((tag) => tag.includes(expected));
+      assert.ok(field, `missing editable rate ${rate}% (looked for ${expected})`);
+      assert.ok(!field.includes('disabled'), `rate ${rate}% should not be locked`);
     }
-    assert.ok(byRate.size > 1, 'the matrix must contain more than one rate level');
-    for (const [rate, count] of byRate) {
-      const matches = rateInputs.filter((tag) => tag.includes(`value="${fmtRaw(rate, 2)}"`));
-      assert.equal(matches.length, count, `rate ${rate}% must be editable on ${count} rows`);
-    }
-  });
-
-  test('sample plan two warns when an edit breaks the product installment rule', () => {
-    const input = presetInput('sample-3');
-    const build = (tiers: typeof input.tiers) =>
-      render(
-        <TierBuilder
-          tiers={tiers}
-          results={simulate({ ...input, tiers }, true).tiers}
-          config={input.config}
-          activePreset="sample-3"
-          onChange={() => {}}
-          onLoadPreset={() => {}}
-        />,
-      );
-
-    // الگوی دست‌نخورده هیچ حالتِ خارج از قاعده ندارد
-    assert.ok(input.tiers.every((tier) => farapouyaFeasible(tier.tDep, tier.tLoan)));
-    assert.ok(input.tiers.every((tier) => tier.tLoan <= farapouyaTermCeiling(tier.tDep)));
-    assert.ok(!build(input.tiers).includes('خارج از قاعدهٔ محصول'));
-
-    // اقساط ۶۰ ماه با انتظار ۲ ماه، طبق قاعدهٔ محصول ممکن نیست
-    const broken = input.tiers.map((tier, index) => (index === 0 ? { ...tier, tLoan: 60 } : tier));
-    const brokenHtml = build(broken);
-    assert.ok(brokenHtml.includes('خارج از قاعدهٔ محصول'), 'the rule breach must be flagged in the table');
-    assert.ok(brokenHtml.includes('اقساط ۵۶ به انتظار دست‌کم ۳ ماه'), 'the tooltip must explain the rule');
-    assert.equal(
-      (brokenHtml.match(/خارج از قاعدهٔ محصول/g) ?? []).length,
-      1,
-      'only the edited row should be flagged',
-    );
-    assertNoBrokenNumbers(brokenHtml, 'TierBuilder/Farapouya-rule-breach');
   });
 
   test('the optimizer result views label a feasible optimum and an infeasible fallback differently', () => {

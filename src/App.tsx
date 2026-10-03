@@ -184,7 +184,6 @@ export default function App() {
       contractType: p.contractType,
       ...(p.contractType === 'qard' ? { qardFeeRate: p.rate } : { murabahaRate: p.rate }),
       loanCap: p.loanCap,
-      minLoan: p.minLoan ?? 0,
       depositProfitRate: p.depositProfitRate,
     }));
     setActivePreset(key);
@@ -329,7 +328,6 @@ export default function App() {
               onChange={patchConfig}
               rateOptions={PRESETS.find((preset) => preset.key === activePreset)?.rateOptions}
               programCap={PRESETS.find((preset) => preset.key === activePreset)?.programCap}
-              programMinLoan={PRESETS.find((preset) => preset.key === activePreset)?.minLoan}
             />
           </section>
 

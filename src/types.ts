@@ -35,8 +35,6 @@ export interface GlobalConfig {
   reserveRatio: number;
   /** سقف فردی اعطای تسهیلات (تومان) — صفر یعنی بدون سقف */
   loanCap: number;
-  /** حداقل مبلغ خودِ تسهیلات (تومان) — صفر یعنی بدون کف محصول */
-  minLoan: number;
   /** افق شبیه‌سازی (ماه) */
   horizon: number;
   /** مانده نقدینگی اولیه خزانه پیش از ورود منابع (تومان) */
