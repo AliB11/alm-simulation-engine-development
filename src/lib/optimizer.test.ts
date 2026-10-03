@@ -22,7 +22,7 @@ import {
 import { simulate } from './engine';
 import { PRESETS } from './presets';
 import { near, presetInput } from './testUtils';
-import { TIER_WAIT_MAX } from './limits';
+import { TIER_ALPHA_MAX, TIER_ALPHA_MIN, TIER_WAIT_MAX } from './limits';
 
 const input = presetInput('sample-1');
 
@@ -47,9 +47,9 @@ describe('design optimizer — lever mechanics', () => {
     const scaled = applyLevers(input.tiers, { ...NEUTRAL_LEVERS, alphaScale: 200 });
     assert.equal(scaled.length, input.tiers.length);
     scaled.forEach((t, i) => {
-      // سقف ۲۲۵ همان سقف سازندهٔ پله و قواعد طرح اول است
-      assert.ok(near(t.alpha, Math.min(225, input.tiers[i].alpha * 2)));
-      assert.ok(t.alpha <= 225);
+      // بهینه‌یاب باید همان سقف مشترک سازندهٔ پله/ورود فایل را رعایت کند.
+      assert.ok(near(t.alpha, Math.min(TIER_ALPHA_MAX, input.tiers[i].alpha * 2)));
+      assert.ok(t.alpha <= TIER_ALPHA_MAX);
       assert.equal(t.tDep, input.tiers[i].tDep);
       assert.equal(t.tLoan, input.tiers[i].tLoan);
       assert.equal(t.allocation, input.tiers[i].allocation);
@@ -61,7 +61,7 @@ describe('design optimizer — lever mechanics', () => {
   it('never emits an alpha the tier builder cannot edit or JSON cannot re-import', () => {
     const huge = input.tiers.map((t) => ({ ...t, alpha: 400 }));
     const scaled = applyLevers(huge, { ...NEUTRAL_LEVERS, alphaScale: 200 });
-    assert.ok(scaled.every((t) => t.alpha === 225));
+    assert.ok(scaled.every((t) => t.alpha === TIER_ALPHA_MAX));
   });
 
   it('shifts waiting and repayment periods but clamps them into legal ranges', () => {
@@ -87,7 +87,7 @@ describe('design optimizer — lever mechanics', () => {
       assert.equal(tier.minBalance, input.tiers[index].minBalance);
       assert.equal(tier.id, input.tiers[index].id);
       assert.ok([12, 24, 36, 48, 60].includes(tier.tLoan));
-      assert.ok(tier.alpha >= 2.5 && tier.alpha <= 225);
+      assert.ok(tier.alpha >= TIER_ALPHA_MIN && tier.alpha <= TIER_ALPHA_MAX);
     });
   });
 
@@ -111,7 +111,7 @@ describe('design optimizer — lever mechanics', () => {
     for (const t of out) {
       assert.ok(Number.isFinite(t.tDep) && t.tDep >= 1 && t.tDep <= TIER_WAIT_MAX);
       assert.ok(Number.isFinite(t.tLoan) && t.tLoan >= 6 && t.tLoan <= 60);
-      assert.ok(Number.isFinite(t.alpha) && t.alpha >= 2.5 && t.alpha <= 225);
+      assert.ok(Number.isFinite(t.alpha) && t.alpha >= TIER_ALPHA_MIN && t.alpha <= TIER_ALPHA_MAX);
     }
     assert.deepEqual(applyLevers([], levers), []);
   });
