@@ -392,7 +392,19 @@ export function MonteCarloPanel({ input, onLoadRun }: Props) {
             </div>
           )}
 
-          {summary && (
+          {/* توقف پیش از کامل‌شدن نخستین اجرا نباید «۰٪ ریسک» را نشان دهد؛
+              نبود داده با صفر بودن احتمال یکی نیست. */}
+          {summary && summary.runs === 0 && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-[12px] leading-6 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+              <CircleSlash2 className="mt-1 h-4 w-4 shrink-0" />
+              <div>
+                آزمون پیش از تکمیل حتی یک اجرا متوقف شد، پس آماری برای نمایش وجود ندارد. برای دیدن توزیع ریسک، آزمون را دوباره
+                اجرا کنید و اجازه دهید دست‌کم چند اجرا کامل شود.
+              </div>
+            </div>
+          )}
+
+          {summary && summary.runs > 0 && (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
                 <ProbTile
@@ -427,6 +439,7 @@ export function MonteCarloPanel({ input, onLoadRun }: Props) {
 
               <div className="overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-800">
                 <table className="w-full min-w-[720px] border-collapse text-right text-[11.5px]">
+                  <caption className="sr-only">توزیع صدکی پیامدهای مونت‌کارلو</caption>
                   <thead>
                     <tr className="bg-slate-50 font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                       <th className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">سنجه</th>

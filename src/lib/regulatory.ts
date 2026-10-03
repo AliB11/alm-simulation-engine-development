@@ -17,7 +17,7 @@
 
 import type { MonthRow } from '../types';
 import { bounded, EPS, finite } from './engine';
-import { bucketCountFor, bucketSizeForRows } from './buckets';
+import { bucketCountFor, bucketLabel, bucketSizeForRows } from './buckets';
 
 export interface RegulatoryParams {
   /** درصد اضافی از ماندهٔ سپردهٔ خرد که در سناریوی استرس خارج فرض می‌شود (LCR) */
@@ -212,7 +212,7 @@ export function computeRegulatory(rows: MonthRow[], params: RegulatoryParams): R
     const outflow = withdrawal + profit;
     bucketCum += inflow - outflow;
     buckets.push({
-      label: size === 1 ? `${from}` : `${from}–${to}`,
+      label: bucketLabel(from, to),
       from,
       to,
       inflow,

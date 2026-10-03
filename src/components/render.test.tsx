@@ -335,6 +335,91 @@ suite('UI smoke — server render of every section', () => {
     }
   });
 
+  test('every data table carries an accessible name', () => {
+    /* یازده جدول داده‌ای در داشبورد وجود دارد؛ بدون <caption> یا aria-label
+       هیچ‌کدام برای صفحه‌خوان نام مشخصی ندارند و کاربر باید حدس بزند کدام
+       جدول را می‌خواند. نام‌ها بصری پنهان‌اند ولی برای فناوری کمکی خوانده
+       می‌شوند. این نگهبان هم منبع را می‌پاید و هم خروجی رندرشده را. */
+    const files = readdirSync(new URL('.', import.meta.url)).filter(
+      (f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx'),
+    );
+    let tables = 0;
+    for (const file of files) {
+      const code = readFileSync(new URL(file, import.meta.url), 'utf8');
+      const opens = code.match(/<table[\s>]/g) ?? [];
+      const named = code.match(/<table[^>]*>\s*<caption/g) ?? [];
+      assert.equal(
+        named.length,
+        opens.length,
+        `${file}: ${opens.length - named.length} table(s) without an accessible name`,
+      );
+      tables += opens.length;
+    }
+    assert.ok(tables >= 10, `expected the dashboard tables to exist, found ${tables}`);
+    const html = render(<App />);
+    assert.ok(html.includes('<caption class="sr-only">'), 'captions must survive the render');
+  });
+
+  test('never ships a raw \\uXXXX escape or a minus-sign typo in the copy', () => {
+    // رگرسیون: در مقدار رشته‌ای JSX فرار `\uXXXX` پردازش نمی‌شود؛ فرمول کارت
+    // «حداکثر کسری» پیش‌تر به‌صورت متن خام «\u2212min(...)» چاپ می‌شد.
+    const html = render(<App />);
+    assert.ok(!html.includes('u2212'), 'a raw escape leaked into the rendered markup');
+    assert.ok(html.includes('−min(0, min CumLiq_t)'), 'the hole formula must use the real minus sign');
+  });
+
+  test('the skip link precedes the header so it is the first focus target', () => {
+    const html = render(<App />);
+    const skip = html.indexOf('پرش به محتوای اصلی');
+    const header = html.indexOf('<header');
+    assert.ok(skip >= 0, 'the skip link is missing');
+    assert.ok(header > skip, 'the skip link must come before the header in the tab order');
+    assert.ok(html.indexOf('href="#config"') > -1 && html.indexOf('href="#config"') < header);
+  });
+
+  test('segmented controls expose their pressed state to assistive tech', () => {
+    const html = render(<App />);
+    assert.ok(html.includes('role="group"'), 'segmented controls need a group role');
+    assert.ok(html.includes('aria-pressed="true"') && html.includes('aria-pressed="false"'));
+  });
+
+  test('info tips describe their trigger and render as a tooltip', () => {
+    const input = presetInput('sample-1');
+    const html = render(<GlobalConfigPanel config={input.config} onChange={() => {}} />);
+    assert.ok(html.includes('aria-describedby'), 'the info triggers must be described');
+    assert.ok(html.includes('role="tooltip"'));
+  });
+
+  test('the tornado table only dims drivers that are truly immaterial', () => {
+    const html = render(<TornadoPanel input={presetInput('sample-1')} />);
+    const rows = html.split('<tr');
+    const approval = rows.find((r) => r.includes('نرخ قبولی اعتباری'));
+    const dflt = rows.find((r) => r.includes('نرخ نکول اقساط'));
+    assert.ok(approval, 'the approval-rate row is missing');
+    assert.ok(dflt, 'the default-rate row is missing');
+    assert.ok(!approval!.includes('opacity-50'), 'a material driver must not be dimmed');
+    assert.ok(dflt!.includes('opacity-50'), 'an immaterial driver should stay dimmed');
+  });
+
+  test('an infinite exit leverage is shown as ∞ in the comparison table', () => {
+    const input = presetInput('sample-1');
+    const squeezed = { ...input, config: { ...input.config, reserveRatio: 100 } };
+    const result = simulate(squeezed, true);
+    assert.equal(result.kpis.leverage, Infinity);
+    const html = render(
+      <ScenarioCompare
+        kpis={result.kpis}
+        currentRows={result.rows}
+        slots={{ A: snapshotSlot('A', squeezed, result.kpis, 'بافر صفر'), B: null, C: null }}
+        onSnapshot={() => {}}
+        onLoad={() => {}}
+        onClear={() => {}}
+        onRename={() => {}}
+      />,
+    );
+    assert.ok(html.includes('∞×'), 'the table must surface the infinite leverage instead of hiding it');
+  });
+
   test('renders an empty portfolio and an out-of-horizon design without breaking', () => {
     const base = presetInput('sample-1');
     const corners: [string, ReturnType<typeof simulate>][] = [

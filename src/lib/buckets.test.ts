@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { bucketCountFor, bucketSizeFor, bucketSizeForRows, DEFAULT_HORIZON, horizonOf } from './buckets';
+import { bucketCountFor, bucketLabel, bucketSizeFor, bucketSizeForRows, DEFAULT_HORIZON, horizonOf } from './buckets';
 import { simulate } from './engine';
 import { computeRegulatory, DEFAULT_REGULATORY } from './regulatory';
 import { tierAttribution } from './attribution';
@@ -56,6 +56,20 @@ describe('time bucketing — one rule shared by the ladder and the heat map', ()
       assert.equal(covered, rows.length, `horizon ${horizon} must be partitioned exactly once`);
       assert.equal(reg.buckets[reg.buckets.length - 1].to, horizon);
     }
+  });
+
+  it('labels a one-month trailing bucket as a single month, not a fake range', () => {
+    // افق ۶۰ ماهه ۶۱ ردیف دارد؛ با سطل ۳ماهه، سطل آخر تنها یک ماه را
+    // می‌پوشاند و پیش‌تر «۶۰–۶۰» چاپ می‌شد.
+    assert.equal(bucketLabel(60, 60), '60');
+    assert.equal(bucketLabel(57, 59), '57–59');
+    assert.equal(bucketLabel(0, 0), '0');
+    assert.equal(bucketLabel(NaN, 12), '0–12');
+    const rows = rowsFor(60);
+    const reg = computeRegulatory(rows, DEFAULT_REGULATORY);
+    assert.equal(reg.buckets[reg.buckets.length - 1].label, '60');
+    const attr = tierAttribution(rows, tierColor);
+    assert.equal(attr.heat.bucketLabels[attr.heat.bucketLabels.length - 1], '60');
   });
 
   it('never divides by zero or builds empty buckets', () => {

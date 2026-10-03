@@ -141,6 +141,7 @@ export function SensitivityPanel({ input }: { input: SimInput }) {
       </div>
       <div className="alm-scroll overflow-x-auto p-5">
         <table className="w-full min-w-[720px] border-separate border-spacing-1.5 text-[12px]">
+          <caption className="sr-only">ماتریس آزمون حساسیت دوبعدی</caption>
           <thead>
             <tr>
               <th className="p-2 text-right text-[11px] font-bold text-slate-500 dark:text-slate-400">

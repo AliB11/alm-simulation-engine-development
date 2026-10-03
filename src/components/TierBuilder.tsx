@@ -171,6 +171,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
       {/* Table */}
       <div className="alm-scroll overflow-x-auto px-5 pb-3 pt-3">
         <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-[12.5px]">
+          <caption className="sr-only">پله‌های محصول و پارامترهای هر پله</caption>
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-950/40">
               <th className={cn(th, 'rounded-r-lg')}>عنوان حالت</th>
@@ -188,7 +189,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
               <th className={th}>
                 <span className="inline-flex items-center gap-1">
                   نرخ اختصاصی
-                  <InfoTip text="نرخ اختصاصی این حالت را مستقیم ویرایش کنید؛ خالی‌کردن فیلد، نرخ ثبت‌شده را پاک نمی‌کند." />
+                  <InfoTip text="نرخ اختصاصی این حالت را مستقیم ویرایش کنید؛ برای بازگشت به نرخ سراسری، فیلد را خالی کنید و از فیلد خارج شوید." />
                 </span>
               </th>
               <th className={th}>
@@ -338,6 +339,10 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                         step={0.1}
                         decimals={2}
                         onChange={(v) => update(t.id, { rateOverride: v })}
+                        /* خالی‌کردن فیلد = بازگشت این حالت به نرخ سراسری؛
+                           بدون این handler، پاک‌کردن فیلد نرخ قبلی را برمی‌گرداند
+                           و کاربر هیچ راهی برای لغو نرخ اختصاصی نداشت. */
+                        onClear={() => update(t.id, { rateOverride: null })}
                         suffix="٪"
                         className="w-[92px]"
                         ariaLabel={`نرخ اختصاصی ${tierLabel(i)}`}

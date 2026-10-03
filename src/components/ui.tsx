@@ -1,4 +1,5 @@
 import {
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -127,10 +128,20 @@ export function Field({
 }
 
 export function InfoTip({ text, className }: { text: string; className?: string }) {
+  const id = useId();
   return (
-    <span className={cn('group relative inline-flex cursor-help align-middle', className)} tabIndex={0}>
-      <Info className="h-3.5 w-3.5 text-slate-400 transition group-hover:text-indigo-500" />
-      <span className="pointer-events-none invisible absolute bottom-full right-1/2 z-50 mb-2 w-64 translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-normal leading-5 text-slate-100 opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 dark:bg-slate-700">
+    <span
+      className={cn('group relative inline-flex cursor-help align-middle', className)}
+      tabIndex={0}
+      aria-label="توضیح تکمیلی"
+      aria-describedby={id}
+    >
+      <Info className="h-3.5 w-3.5 text-slate-400 transition group-hover:text-indigo-500" aria-hidden />
+      <span
+        id={id}
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full right-1/2 z-50 mb-2 w-64 max-w-[calc(100vw-2rem)] translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-normal leading-5 text-slate-100 opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 dark:bg-slate-700"
+      >
         {text}
       </span>
     </span>
@@ -421,6 +432,7 @@ export function Segmented<T extends string>({
 }) {
   return (
     <div
+      role="group"
       className={cn(
         'inline-flex rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200/70 dark:bg-slate-800/80 dark:ring-slate-700/60',
         full && 'flex w-full',
@@ -431,6 +443,7 @@ export function Segmented<T extends string>({
         <button
           key={o.value}
           type="button"
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
             'flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold transition [&>svg]:h-3.5 [&>svg]:w-3.5',

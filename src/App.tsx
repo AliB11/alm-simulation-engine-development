@@ -273,6 +273,16 @@ export default function App() {
           <div className="absolute -top-24 left-[5%] h-[360px] w-[360px] rounded-full bg-sky-300/20 blur-3xl dark:bg-violet-600/10" />
         </div>
 
+        {/* لینک پرش پیش از سربرگ می‌آید تا نخستین عنصر قابل‌فوکوس صفحه باشد؛
+            اگر بعد از سربرگ قرار بگیرد، کاربر کیبورد ابتدا باید از همهٔ
+            دکمه‌ها و ناوبری عبور کند تا به آن برسد. */}
+        <a
+          href="#config"
+          className="sr-only focus:not-sr-only focus:fixed focus:right-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-[13px] focus:font-bold focus:text-white"
+        >
+          پرش به محتوای اصلی
+        </a>
+
         <Header
           dark={dark}
           onToggleDark={() => setDark((d) => !d)}
@@ -284,13 +294,6 @@ export default function App() {
           onImportJson={importJson}
           kpis={result.kpis}
         />
-
-        <a
-          href="#config"
-          className="sr-only focus:not-sr-only focus:fixed focus:right-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-[13px] focus:font-bold focus:text-white"
-        >
-          پرش به محتوای اصلی
-        </a>
 
         <main className="relative mx-auto max-w-[1600px] space-y-12 px-4 py-8 lg:px-6">
           <section>

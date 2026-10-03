@@ -96,9 +96,17 @@ export const KPI_ROWS: KpiRowDef[] = [
   { key: 'borrowers', label: 'تعداد وام‌گیرندگان', kind: 'count' },
 ];
 
+/**
+ * مقدار یک سنجه برای جدول مقایسه. `null` یعنی سنجه اصلاً عدد نیست
+ * (مثلاً ماه واژگونی که وجود ندارد) و با «—» نمایش داده می‌شود.
+ *
+ * بی‌نهایت عمداً حذف نمی‌شود: اهرم خروج وقتی منابع خالص صفر باشد ∞ است و
+ * نمایش «—» به‌جای «∞×» یک ریسک بحرانی را پنهان می‌کرد.
+ */
 export function kpiValue(k: SimKpis, key: keyof SimKpis): number | null {
   const v = k[key];
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  if (typeof v !== 'number' || Number.isNaN(v)) return null;
+  return v;
 }
 
 /** خلاصهٔ تفاوت‌های پیکربندی دو سناریو — برای توضیح اینکه چه چیزی عوض شده */

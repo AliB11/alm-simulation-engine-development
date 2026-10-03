@@ -39,8 +39,9 @@
   rate (IRR) and the customer's real cost after the opportunity cost of waiting.
 - **Cash-flow CSV + general-ledger CSV export** — the monthly matrix, or one signed row per tier/vintage event that
   reconciles exactly to `CumLiq(H)` for Excel / BI review.
-- **Inverse tier designer** — multi-start coordinate search over α scale, waiting period, repayment term, contract rate and
-  allocation tilt, subject to liquidity, leverage and margin constraints, with one-click apply. Feasibility outranks the
+- **Inverse tier designer** — multi-start coordinate search over α scale, waiting period and repayment term (rates and
+  allocation shares are held fixed, and repayment terms snap to the tiers' own selectable terms), subject to liquidity,
+  leverage and margin constraints, with one-click apply. Feasibility outranks the
   objective: when nothing satisfies every constraint the panel ranks designs by *violation severity* instead of quietly
   recommending the one with the biggest objective and the worst liquidity hole, and lever combinations that clamp to the
   same tiers collapse into a single candidate.
@@ -52,6 +53,9 @@
 - **Methodology panel** — every formula shown with live-substituted values.
 - **Toman / Rial toggle, dark / light theme, localStorage persistence, JSON scenario import/export.**
 - **Offline Persian font** — Vazirmatn is bundled (OFL-1.1); the single-file build does not call Google Fonts.
+- **Keyboard & screen-reader friendly** — a skip link precedes the header, segmented controls expose `role="group"` +
+  `aria-pressed`, info tips are wired with `aria-describedby`/`role="tooltip"`, and every one of the eleven data tables
+  carries a visually hidden `<caption>` (guarded by a test).
 - **Golden-number tests + CI** — the two shipped profiles are frozen to the rial, and GitHub Actions runs lint,
   typecheck, tests and build, plus a server-render smoke test of every section and an orphan-component guard.
 
@@ -289,9 +293,13 @@ src/
 - **شکاف سررسید (WAL)**: سمت تعهدات روی همان خروجی نردبان (`برداشت + سود پرداختی سپرده + ماندهٔ زندهٔ افق`) وزن می‌شود.
   پیش‌تر سود سپرده از این میانگین کنار گذاشته می‌شد و در طرح‌های دارای سود (نمونهٔ سوم) عمر تعهدات حدود یک ماه کوتاه‌تر
   و شکاف سررسید بزرگ‌تر از نمودارِ همان کارت نشان داده می‌شد.
+  علامت شکاف هم جهت ریسک را می‌گوید: **مثبت** یعنی دارایی‌ها دیرتر از منابع برمی‌گردند (فشار تأمین/بازتأمین) و
+  کارت سنجه‌ها آن را سرخ نشان می‌دهد؛ صفر یا منفی یعنی منابع دیرتر از دارایی‌ها خارج می‌شوند و رنگ سبز می‌گیرد.
 - **اندازهٔ سطل زمانی**: یک قاعدهٔ مشترک در `src/lib/buckets.ts` برای نردبان سررسید و نقشهٔ حرارتی، بر پایهٔ **افق**
   (شمارهٔ آخرین ماه) و نه تعداد ردیف‌ها. ردیف‌های موتور از ماه صفر شروع می‌شوند، پس استفاده از تعداد ردیف‌ها مرزها را
   یک ماه جابه‌جا می‌کرد و افق پیش‌فرض ۶۰ ماهه به‌جای سطل ۳ ماهه، سطل ۶ ماهه می‌گرفت.
+  برچسب‌ها هم از همان ماژول می‌آیند: سطل تک‌ماهی (مثلاً ماه ۶۰ در افق ۶۰ ماهه) به‌جای بازهٔ بی‌معنای «۶۰–۶۰» فقط
+  `۶۰` چاپ می‌شود.
 - **اهرم ∞ و حاشیهٔ ∞**: هر دو نسبت، وقتی مخرجشان صفر می‌شود، بی‌نهایت **با علامت** برمی‌گردانند. عدد صفر در این حالت
   «ایمن» یا «سر‌به‌سر» به نظر می‌رسید در حالی که طرح می‌تواند کاملاً زیان‌ده باشد.
 - **نمودار گردبادی**: کران‌های هر محرک دقیقاً همان مقادیر شبکهٔ آزمون بحران‌اند، پس نتیجهٔ آن با خانه‌های ماتریس

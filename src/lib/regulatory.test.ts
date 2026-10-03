@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegulatoryParams } from './regulatory';
 import { computeRegulatory, DEFAULT_REGULATORY } from './regulatory';
-import { bucketSizeFor, horizonOf } from './buckets';
+import { bucketLabel, bucketSizeFor, horizonOf } from './buckets';
 import { tierAttribution } from './attribution';
 import { tierColor } from './presets';
 import { EPS, simulate } from './engine';
@@ -42,7 +42,7 @@ describe('regulatory metrics — bucketing', () => {
       assert.equal(b.from, i === 0 ? firstMonth : reg.buckets[i - 1].to + 1);
       assert.ok(b.to <= lastMonth);
       assert.ok(b.to >= b.from);
-      assert.equal(b.label, reg.bucketSize === 1 ? `${b.from}` : `${b.from}–${b.to}`);
+      assert.equal(b.label, bucketLabel(b.from, b.to));
     }
     assert.equal(covered, H, 'buckets must cover every month exactly once');
   });

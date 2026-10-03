@@ -117,6 +117,7 @@ export function TornadoPanel({ input }: { input: SimInput }) {
 
   const swingMax = Math.max(1e-9, ...data.map((d) => Math.max(Math.abs(d.lowDelta), Math.abs(d.highDelta))));
   const swingUnit = axisUnit(swingMax);
+  const totalSwing = result.bars.reduce((s, b) => s + b.swing, 0);
   const grid = dark ? '#1e293b' : '#e2e8f0';
   const tick = { fill: dark ? '#94a3b8' : '#64748b', fontSize: 11 };
   const better = higherIsBetter(metric);
@@ -198,6 +199,7 @@ export function TornadoPanel({ input }: { input: SimInput }) {
 
       <div className="overflow-x-auto border-t border-slate-100 dark:border-slate-800">
         <table className="w-full min-w-[720px] border-collapse text-right text-[11.5px]">
+          <caption className="sr-only">رتبه‌بندی محرک‌های ریسک و اندازهٔ نوسان هر محرک</caption>
           <thead>
             <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <th className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">رتبه</th>
@@ -211,9 +213,8 @@ export function TornadoPanel({ input }: { input: SimInput }) {
           </thead>
           <tbody>
             {result.bars.map((b, i) => {
-              const total = result.bars.reduce((s, x) => s + x.swing, 0);
-              const share = total > 0 ? (b.swing / total) * 100 : 0;
-              const negligible = isNegligible(b, result.base);
+              const share = totalSwing > 0 ? (b.swing / totalSwing) * 100 : 0;
+              const negligible = isNegligible(b, result.base, totalSwing);
               return (
                 <tr
                   key={b.key}

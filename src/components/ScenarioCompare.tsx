@@ -257,6 +257,7 @@ export function ScenarioCompare({ kpis, currentRows, slots, onSnapshot, onLoad, 
         <>
           <div className="overflow-x-auto border-t border-slate-100 dark:border-slate-800">
             <table className="w-full min-w-[640px] border-collapse text-right text-[12px]">
+              <caption className="sr-only">مقایسهٔ سنجه‌های جایگاه‌های سناریو</caption>
               <thead>
                 <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                   <th className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">سنجه</th>
@@ -280,7 +281,16 @@ export function ScenarioCompare({ kpis, currentRows, slots, onSnapshot, onLoad, 
                       <td className="px-3 py-2 font-semibold text-slate-600 dark:text-slate-300">{row.label}</td>
                       {sims.map((s) => {
                         const v = kpiValue(s.kpis, row.key);
-                        const delta = v !== null && refValue !== null && s.id !== reference?.id ? v - refValue : null;
+                        /* تفاضل فقط وقتی معنا دارد که هر دو مقدار متناهی باشند؛
+                           ∞ − ∞ و ∞ − عدد، تفاضل نمایش‌دادنی تولید نمی‌کند. */
+                        const delta =
+                          v !== null &&
+                          refValue !== null &&
+                          Number.isFinite(v) &&
+                          Number.isFinite(refValue) &&
+                          s.id !== reference?.id
+                            ? v - refValue
+                            : null;
                         const good =
                           delta === null || Math.abs(delta) < 1e-9 ? null : row.lowerIsBetter ? delta < 0 : delta > 0;
                         return (

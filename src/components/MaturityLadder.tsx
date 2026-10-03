@@ -245,6 +245,7 @@ export function MaturityLadder({ result, config, reg, attr }: Props) {
               نقشهٔ حرارتی خروج پله‌ها در زمان
             </div>
             <table className="w-full border-collapse text-[10.5px]">
+              <caption className="sr-only">نقشهٔ حرارتی خروج پله‌ها در زمان</caption>
               <thead>
                 <tr>
                   <th className="sticky right-0 z-10 bg-white px-2 py-1.5 text-right font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -355,6 +356,7 @@ export function MaturityLadder({ result, config, reg, attr }: Props) {
 
       <div className="overflow-x-auto border-t border-slate-100 dark:border-slate-800">
         <table className="w-full min-w-[860px] border-collapse text-right text-[12px]">
+          <caption className="sr-only">نردبان سررسید و انتساب ریسک به پله‌ها</caption>
           <thead>
             <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <th className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">پله</th>

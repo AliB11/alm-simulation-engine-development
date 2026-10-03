@@ -19,7 +19,7 @@
 
 import type { SimInput, SimKpis } from '../types';
 import { applySensitivity, SENS_VARS, simulate, type SensMetric, type SensVar } from './engine';
-import { EPS, finite } from './engine';
+import { finite } from './engine';
 
 /** سقف نمایشی اهرم خروج — یک خانهٔ ∞ نباید مقیاس همهٔ میله‌ها را بخورد */
 export const LEVERAGE_DISPLAY_CAP = 100;
@@ -115,8 +115,20 @@ export function runTornado(input: SimInput, metric: SensMetric): TornadoResult {
   return { metric, base, bars, evaluations };
 }
 
-/** محرک‌هایی که عملاً بر این سنجه اثر ندارند — برای کم‌رنگ نشان دادن در رابط */
-export function isNegligible(bar: TornadoBar, base: number): boolean {
+/** سهمی از کل نوسان نمودار که پایین‌تر از آن «کم‌اثر» شمرده می‌شود */
+export const NEGLIGIBLE_SWING_SHARE = 0.005;
+
+/**
+ * محرک‌هایی که عملاً بر این سنجه اثر ندارند — برای کم‌رنگ نشان دادن در رابط.
+ *
+ * ملاک، سهم این محرک از «کل نوسان» سایر محرک‌هاست، نه مقایسهٔ آن با خودِ
+ * مقدار پایه: در کارت حداکثر کسری، مقدار پایه (مثلاً ۸٫۵ میلیارد) از نوسان
+ * بسیاری از محرک‌ها بزرگ‌تر است و مقایسه با پایه، محرک مهمی مثل «نرخ قبولی»
+ * را هم کم‌رنگ می‌کرد.
+ */
+export function isNegligible(bar: TornadoBar, base: number, totalSwing = 0): boolean {
+  if (!(bar.swing > 0)) return true;
+  if (totalSwing > 0) return bar.swing / totalSwing < NEGLIGIBLE_SWING_SHARE;
   const scale = Math.max(1, Math.abs(base));
-  return bar.swing <= EPS * scale * 1e6 || bar.swing / scale < 1e-6;
+  return bar.swing / scale < 1e-4;
 }
