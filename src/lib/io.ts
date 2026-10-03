@@ -138,30 +138,23 @@ export function sanitizeState(raw: unknown): Partial<PersistedState> | null {
   if (tiers) out.tiers = tiers;
   const activePreset = typeof raw.activePreset === 'string' ? PRESETS.find((preset) => preset.key === raw.activePreset) : undefined;
   if (activePreset) {
-    const selectedRate =
-      activePreset.contractType === 'qard'
-        ? (config?.qardFeeRate ?? DEFAULT_CONFIG.qardFeeRate)
-        : (config?.murabahaRate ?? DEFAULT_CONFIG.murabahaRate);
-    const selectedAlphaRange = activePreset.rateAlphaRanges?.[selectedRate] ?? activePreset.alphaRange;
-    const rateChoiceMatches = !activePreset.rateOptions || activePreset.rateOptions.includes(selectedRate);
     const tierOptionsMatch =
-      rateChoiceMatches &&
-      (tiers === undefined ||
-        (tiers.length > 0 &&
-          tiers.every(
-            (tier) =>
-              (!activePreset.repaymentTerms || activePreset.repaymentTerms.includes(tier.tLoan)) &&
-              (!activePreset.waitingRange ||
-                (tier.tDep >= activePreset.waitingRange[0] && tier.tDep <= activePreset.waitingRange[1])) &&
-              (!selectedAlphaRange ||
-                (tier.alpha >= selectedAlphaRange[0] && tier.alpha <= selectedAlphaRange[1])) &&
-              (!activePreset.tierRateRange ||
-                tier.rateOverride === null ||
-                (tier.rateOverride >= activePreset.tierRateRange[0] && tier.rateOverride <= activePreset.tierRateRange[1])) &&
-              (!activePreset.rateOptions ||
-                tier.rateOverride === null ||
-                activePreset.rateOptions.includes(tier.rateOverride)),
-          )));
+      tiers === undefined ||
+      (tiers.length > 0 &&
+        tiers.every(
+          (tier) =>
+            (!activePreset.repaymentTerms || activePreset.repaymentTerms.includes(tier.tLoan)) &&
+            (!activePreset.waitingRange ||
+              (tier.tDep >= activePreset.waitingRange[0] && tier.tDep <= activePreset.waitingRange[1])) &&
+            (!activePreset.alphaRange ||
+              (tier.alpha >= activePreset.alphaRange[0] && tier.alpha <= activePreset.alphaRange[1])) &&
+            (!activePreset.tierRateRange ||
+              tier.rateOverride === null ||
+              (tier.rateOverride >= activePreset.tierRateRange[0] && tier.rateOverride <= activePreset.tierRateRange[1])) &&
+            (!activePreset.rateOptions ||
+              tier.rateOverride === null ||
+              activePreset.rateOptions.includes(tier.rateOverride)),
+        ));
     out.activePreset = tierOptionsMatch ? activePreset.key : null;
   } else if (raw.activePreset === null) {
     out.activePreset = null;
@@ -191,19 +184,10 @@ export function loadState(): Partial<PersistedState> | null {
     const targetPreset = typeof key === 'string' ? PRESETS.find((preset) => preset.key === key) : undefined;
     if (!targetPreset) return state;
     const contractType = state.config?.contractType ?? DEFAULT_CONFIG.contractType;
-    const selectedRate =
-      targetPreset.contractType === 'qard'
-        ? (state.config?.qardFeeRate ?? DEFAULT_CONFIG.qardFeeRate)
-        : (state.config?.murabahaRate ?? DEFAULT_CONFIG.murabahaRate);
-    if (
-      contractType !== targetPreset.contractType ||
-      (targetPreset.rateOptions && !targetPreset.rateOptions.includes(selectedRate))
-    ) {
-      return { ...state, activePreset: null };
-    }
+    if (contractType !== targetPreset.contractType) return { ...state, activePreset: null };
     return {
       ...state,
-      tiers: presetTiers(targetPreset.key, selectedRate),
+      tiers: presetTiers(targetPreset.key),
       activePreset: targetPreset.key,
     };
   } catch {

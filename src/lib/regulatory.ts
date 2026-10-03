@@ -121,9 +121,7 @@ export function computeRegulatory(rows: MonthRow[], params: RegulatoryParams): R
 
   /* ------------------------------- LCR ------------------------------- */
   const lcr: LcrPoint[] = rows.map((row) => {
-    const liquidAssets = Math.max(0, finite(row.cum, 0));
-    // حفظ مقدار دقیق در حالت خنثی؛ ضرب و تقسیم بر ۱۰۰ می‌تواند چند ulp خطا وارد کند.
-    const hqla = hqlaHaircut === 0 ? liquidAssets : (liquidAssets * (100 - hqlaHaircut)) / 100;
+    const hqla = (Math.max(0, finite(row.cum, 0)) * (100 - hqlaHaircut)) / 100;
     const stress = (finite(row.depositBalance, 0) * effStressRunoff) / 100;
     const outflow = Math.max(0, finite(row.outflow, 0)) + stress;
     return {

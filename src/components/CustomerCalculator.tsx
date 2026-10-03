@@ -191,7 +191,7 @@ export function CustomerCalculator({ tiers, config }: Props) {
             >
               {matchingWithLabels.map(({ tier, label }) => (
                 <option key={tier.id} value={tier.id}>
-                  {label} · ضریب {fmtPct(tier.alpha, 2)}
+                  {label} · ضریب {fmtPct(tier.alpha, 1)}
                 </option>
               ))}
             </select>
@@ -307,7 +307,7 @@ export function CustomerCalculator({ tiers, config }: Props) {
               <div className="mt-3 space-y-2.5 text-[11.5px] leading-6 text-slate-600 dark:text-slate-300">
                 <div className="flex items-start justify-between gap-3">
                   <span>ضریب این حالت</span>
-                  <b className="shrink-0 text-slate-800 dark:text-slate-100">{fmtPct(selected.tier.alpha, 2)}</b>
+                  <b className="shrink-0 text-slate-800 dark:text-slate-100">{fmtPct(selected.tier.alpha, 1)}</b>
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <span>{rateLabel}</span>
