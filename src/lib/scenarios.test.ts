@@ -56,7 +56,6 @@ describe('scenario diff coverage', () => {
     const a = presetInput('sample-1');
     const b = structuredClone(a);
     b.config.initialLiquidity = 1_000_000;
-    b.config.minLoan = 10_000_000;
     b.config.releaseReserve = true;
     b.config.lgdRate = 50;
     b.config.writeOffLag = 3;
@@ -71,7 +70,6 @@ describe('scenario diff coverage', () => {
     const diffs = configDiffs(snapshotSlot('A', a, ka, 'الف'), snapshotSlot('B', b, kb, 'ب'));
     for (const label of [
       'نقدینگی اولیه',
-      'حداقل مبلغ وام',
       'آزادسازی سپرده قانونی',
       'LGD',
       'مهلت سوخت',

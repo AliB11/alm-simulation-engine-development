@@ -1,6 +1,6 @@
-import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash, TriangleAlert } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, Layers, Plus, Scale, Sparkles, Trash } from 'lucide-react';
 import type { GlobalConfig, Tier, TierResult } from '../types';
-import { FARAPOUYA, FARAPOUYA_ALPHA_STEPS, FARAPOUYA_RATE_STEPS, PRESETS, tierColor, tierLabel, uid } from '../lib/presets';
+import { PRESETS, tierColor, tierLabel, uid } from '../lib/presets';
 import { IMPORT_MONEY_MAX, TIER_ALPHA_MAX, TIER_ALPHA_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN } from '../lib/limits';
 import { globalRate } from '../lib/engine';
 import { fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
@@ -38,30 +38,6 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
   const rateMax = activePresetDetails?.tierRateRange?.[1] ?? (activePresetDetails?.rateOptions?.at(-1) ?? 60);
   const gRate = globalRate(config);
   const resultById = new Map(results.map((r) => [r.tier.id, r]));
-
-  /* ماتریس حالت‌های نگین فراپویا: دامنه‌های بازسازی‌شده از خودِ الگو خوانده
-     می‌شوند تا متن توضیحی هرگز از حالت‌های واقعی جدا نیفتد. */
-  const farapouyaPreset = activePreset === 'sample-3' ? activePresetDetails : undefined;
-  const farapouya = (() => {
-    if (!farapouyaPreset) return null;
-    const presetModes = farapouyaPreset.tiers;
-    const rates = presetModes.map((tier) => tier.rateOverride ?? farapouyaPreset.rate);
-    const alphas = presetModes.map((tier) => tier.alpha);
-    const bothSteps = FARAPOUYA_RATE_STEPS + FARAPOUYA_ALPHA_STEPS;
-    return {
-      modes: presetModes.length,
-      waitings: new Set(presetModes.map((tier) => tier.tDep)).size,
-      alphaMin: Math.min(...alphas),
-      alphaMax: Math.max(...alphas),
-      rateMin: Math.min(...rates),
-      rateMax: Math.max(...rates),
-      rateSteps: FARAPOUYA_RATE_STEPS,
-      alphaSteps: FARAPOUYA_ALPHA_STEPS,
-      // امتیاز و انتظارِ لازم برای رسیدنِ هم‌زمان به هر دو کران منتشرشده
-      bothSteps,
-      bothWait: FARAPOUYA.minWait + bothSteps,
-    };
-  })();
 
   const update = (id: string, patch: Partial<Tier>) =>
     onChange(tiers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -210,35 +186,6 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
         </div>
       )}
 
-      {farapouya && (
-        <div className="mx-5 mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-[11.5px] leading-6 text-amber-950 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-100">
-          <div className="font-extrabold">ماتریس حالت‌های نگین فراپویا (بانک سپه)</div>
-          <div>
-            {toFa(farapouya.waitings)} دورهٔ انتظار ({toFa(FARAPOUYA.minWait)} تا {toFa(FARAPOUYA.maxWait)} ماه) ×{' '}
-            {toFa(FARAPOUYA.terms.length)} دورهٔ بازپرداخت ({toFa(FARAPOUYA.terms[0])} تا {toFa(FARAPOUYA.maxTerm)} ماه) ={' '}
-            {toFa(farapouya.modes)} حالتِ مجاز. قاعدهٔ محصول: هر ماه انتظارِ بیشتر از حداقلِ {toFa(FARAPOUYA.minWait)} ماه یک
-            امتیاز می‌سازد که صرفِ یکی از سه مزیت (یا ترکیبی از آن‌ها) می‌شود — {toFa(FARAPOUYA.termStep)}+ ماه اقساط تا سقف{' '}
-            {toFa(FARAPOUYA.maxTerm)}، یا {toFa(FARAPOUYA.alphaStep)}+ واحد درصد ضریب تا سقف {toFa(FARAPOUYA.alphaCap)}٪، یا{' '}
-            {toFa(FARAPOUYA.rateStep)}− واحد درصد نرخ سود تا کف {toFa(FARAPOUYA.rateFloor)}٪. اقساط بالاتر از{' '}
-            {toFa(FARAPOUYA.baseTerm)} ماه فقط با انتظارِ بیش از {toFa(FARAPOUYA.minWait)} ماه ممکن است.
-          </div>
-          <div>
-            موتور امتیاز باقی‌ماندهٔ هر حالت را به نسبت هزینهٔ کاملِ دو مزیت ({toFa(farapouya.rateSteps)} گام برای نرخ و{' '}
-            {toFa(farapouya.alphaSteps)} گام برای ضریب) تقسیم می‌کند؛ نتیجه ضریب {fmtPct(farapouya.alphaMin, 0)} تا{' '}
-            {fmtPct(farapouya.alphaMax, 0)} و نرخ {fmtPct(farapouya.rateMin, 0)} تا {fmtPct(farapouya.rateMax, 0)} است. رسیدنِ
-            هم‌زمان به ضریب {fmtPct(FARAPOUYA.alphaCap, 0)} و نرخ {fmtPct(FARAPOUYA.rateFloor, 0)} به {toFa(farapouya.bothSteps)}{' '}
-            امتیاز ({toFa(farapouya.bothWait)} ماه انتظار) نیاز دارد و با سقفِ {toFa(FARAPOUYA.maxWait)} ماهِ محصول ممکن نیست.
-            جدول رسمی حالت‌ها از بانک منتشر نشده، پس این بازسازی شفاف است و هر دو فیلد قابل‌ویرایش‌اند.
-          </div>
-          <div className="text-amber-800 dark:text-amber-200">
-            سهم آغازین هر حالت {fmtPct(100 / Math.max(1, tiers.length), 2)} است (فرض آموزشی، نه ترکیب رسمی مشتریان). حداقل
-            میانگین مانده {fmtNumber(FARAPOUYA.minBalance / 1e6)} میلیون تومان، حداقل مبلغ تسهیلات{' '}
-            {fmtNumber(FARAPOUYA.minLoan / 1e6)} میلیون تومان، سقف فردی {fmtNumber(FARAPOUYA.loanCap / 1e6)} میلیون تومان و نرخ
-            سود علی‌الحساب خودِ سپرده {fmtPct(FARAPOUYA.depositProfitRate, 2)} است.
-          </div>
-        </div>
-      )}
-
       {/* Table */}
       <div className="alm-scroll overflow-x-auto px-5 pb-3 pt-3">
         <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-[12.5px]">
@@ -309,42 +256,31 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
                     />
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
-                    <div className="flex flex-col items-start gap-1">
-                      {activePresetDetails?.repaymentTerms ? (
-                        <select
-                          value={String(t.tLoan)}
-                          onChange={(event) => update(t.id, { tLoan: Number(event.target.value) })}
-                          aria-label={`دوره بازپرداخت ${tierLabel(i)}`}
-                          className="h-8 w-[92px] rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-200"
-                        >
-                          {activePresetDetails.repaymentTerms.map((months) => (
-                            <option key={months} value={months}>
-                              {toFa(months)} ماه
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <NumField
-                          size="sm"
-                          value={t.tLoan}
-                          min={repaymentMin}
-                          max={repaymentMax}
-                          onChange={(v) => update(t.id, { tLoan: Math.round(v) })}
-                          suffix="ماه"
-                          className="w-[92px]"
-                          ariaLabel="دوره بازپرداخت"
-                        />
-                      )}
-                      {activePresetDetails?.modeFeasible?.(t.tDep, t.tLoan) === false && (
-                        <span
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400"
-                          title={activePresetDetails.modeRule}
-                        >
-                          <TriangleAlert className="h-3 w-3" />
-                          خارج از قاعدهٔ محصول
-                        </span>
-                      )}
-                    </div>
+                    {activePresetDetails?.repaymentTerms ? (
+                      <select
+                        value={String(t.tLoan)}
+                        onChange={(event) => update(t.id, { tLoan: Number(event.target.value) })}
+                        aria-label={`دوره بازپرداخت ${tierLabel(i)}`}
+                        className="h-8 w-[92px] rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-200"
+                      >
+                        {activePresetDetails.repaymentTerms.map((months) => (
+                          <option key={months} value={months}>
+                            {toFa(months)} ماه
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <NumField
+                        size="sm"
+                        value={t.tLoan}
+                        min={repaymentMin}
+                        max={repaymentMax}
+                        onChange={(v) => update(t.id, { tLoan: Math.round(v) })}
+                        suffix="ماه"
+                        className="w-[92px]"
+                        ariaLabel="دوره بازپرداخت"
+                      />
+                    )}
                   </td>
                   <td className="border-b border-slate-100 px-2 py-2 dark:border-slate-800">
                     <NumField

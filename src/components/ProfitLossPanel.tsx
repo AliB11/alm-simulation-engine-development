@@ -3,7 +3,7 @@ import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveConta
 import { Badge, Card, CardHeader, Money } from './ui';
 import { Coins, Landmark, PiggyBank, Receipt } from 'lucide-react';
 import type { GlobalConfig, SimResult } from '../types';
-import { axisUnit, fmtNumber, fmtPct, fmtPctAuto, fmtRaw, toFa } from '../lib/format';
+import { axisUnit, fmtNumber, fmtPct, fmtRaw, toFa } from '../lib/format';
 import { useDisplay } from '../context/display';
 import { cn } from '../utils/cn';
 
@@ -140,7 +140,7 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
         subtitle={`درآمد وصولی، سود پرداختی سپرده و هزینهٔ تأمین کسری در افق ${toFa(horizon)} ماهه — ارقام به ${unit}`}
         actions={
           config.depositProfitRate > 0 ? (
-            <Badge tone="indigo">نرخ سود سپرده {fmtPctAuto(config.depositProfitRate)}</Badge>
+            <Badge tone="indigo">نرخ سود سپرده {fmtPct(config.depositProfitRate, 1)}</Badge>
           ) : (
             <Badge tone="slate">سود سپرده خنثی (۰٪)</Badge>
           )
@@ -160,7 +160,7 @@ export function ProfitLossPanel({ result, config }: { result: SimResult; config:
           tone="violet"
           label="سود پرداختی به سپرده‌گذاران"
           value={k.totalProfitPaid}
-          hint={`میانگین ماندهٔ ماهانه × ${fmtPctAuto(config.depositProfitRate)} ÷ ۱۲`}
+          hint={`میانگین ماندهٔ ماهانه × ${fmtPct(config.depositProfitRate, 1)} ÷ ۱۲`}
         />
         <Tile
           icon={<Coins />}

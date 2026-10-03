@@ -38,7 +38,6 @@ function sanitizeConfig(v: unknown): GlobalConfig | undefined {
     murabahaRate: finiteNumber(v.murabahaRate, DEFAULT_CONFIG.murabahaRate, 0, IMPORT_RATE_MAX),
     reserveRatio: finiteNumber(v.reserveRatio, DEFAULT_CONFIG.reserveRatio, 0, 100),
     loanCap: finiteNumber(v.loanCap, DEFAULT_CONFIG.loanCap, 0, IMPORT_MONEY_MAX),
-    minLoan: finiteNumber(v.minLoan, DEFAULT_CONFIG.minLoan, 0, IMPORT_MONEY_MAX),
     horizon: finiteNumber(v.horizon, DEFAULT_CONFIG.horizon, 12, 120, true),
     initialLiquidity: finiteNumber(v.initialLiquidity, DEFAULT_CONFIG.initialLiquidity, -IMPORT_MONEY_MAX, IMPORT_MONEY_MAX),
     releaseReserve: typeof v.releaseReserve === 'boolean' ? v.releaseReserve : DEFAULT_CONFIG.releaseReserve,
@@ -202,24 +201,8 @@ export function loadState(): Partial<PersistedState> | null {
     ) {
       return { ...state, activePreset: null };
     }
-    /* مهاجرت یک‌بارهٔ نمونهٔ قدیمیِ فراپویا: همان کلید داخلی برای سازگاری فایل‌ها
-       حفظ شده، اما ماتریس جدید نگین فراپویا و پیش‌فرض‌های محصول جدید باید جایگزین
-       ۷ پلهٔ قدیمی شوند. این شرط فقط برای ردپای ۷ پله‌ای نسخهٔ قبل فعال است؛
-       تنظیمات کاربرِ یک الگوی جدید دست‌نخورده می‌ماند. */
-    const legacySampleThree = targetPreset.key === 'sample-3' && Array.isArray(raw.tiers) && raw.tiers.length === 7;
-    const migratedConfig = legacySampleThree
-      ? {
-          ...(state.config ?? DEFAULT_CONFIG),
-          contractType: targetPreset.contractType,
-          murabahaRate: targetPreset.rate,
-          loanCap: targetPreset.loanCap,
-          minLoan: targetPreset.minLoan ?? 0,
-          depositProfitRate: targetPreset.depositProfitRate,
-        }
-      : state.config;
     return {
       ...state,
-      config: migratedConfig,
       tiers: presetTiers(targetPreset.key, selectedRate),
       activePreset: targetPreset.key,
     };

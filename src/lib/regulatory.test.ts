@@ -9,9 +9,9 @@ import { EPS, simulate } from './engine';
 import { near, presetInput } from './testUtils';
 
 const sampleOne = presetInput('sample-1');
-const sampleTwo = presetInput('sample-3');
+const sampleThree = presetInput('sample-3');
 const sampleOneResult = simulate(sampleOne, true);
-const sampleTwoResult = simulate(sampleTwo, true);
+const sampleThreeResult = simulate(sampleThree, true);
 
 describe('regulatory metrics — bucketing', () => {
   it('chooses a readable bucket size for every horizon', () => {
@@ -209,18 +209,18 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
   });
 
   it('weights deposit profit into the liability WAL, like the ladder does', () => {
-    const paying = computeRegulatory(sampleTwoResult.rows, DEFAULT_REGULATORY);
-    const profit = sampleTwoResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0);
-    assert.ok(profit > 0, 'sampleTwo pays deposit profit');
+    const paying = computeRegulatory(sampleThreeResult.rows, DEFAULT_REGULATORY);
+    const profit = sampleThreeResult.rows.reduce((s, r) => s + Math.max(0, r.profitPaid), 0);
+    assert.ok(profit > 0, 'sampleThree pays deposit profit');
 
     let wOut = 0;
     let tOut = 0;
-    for (const row of sampleTwoResult.rows) {
+    for (const row of sampleThreeResult.rows) {
       const outflow = Math.max(0, row.withdrawalOut) + Math.max(0, row.profitPaid);
       wOut += row.t * outflow;
       tOut += outflow;
     }
-    const last = sampleTwoResult.rows[sampleTwoResult.rows.length - 1];
+    const last = sampleThreeResult.rows[sampleThreeResult.rows.length - 1];
     wOut += last.t * last.depositBalance;
     tOut += last.depositBalance;
     assert.ok(near(paying.walLiabilities!, wOut / tOut, 1e-9));
@@ -228,7 +228,7 @@ describe('regulatory metrics — NSFR proxy and maturity gap', () => {
     // اگر سود سپرده کنار گذاشته شود، عمر تعهدات کوتاه‌تر و شکاف سررسید بزرگ‌تر می‌شود
     let wWd = 0;
     let tWd = 0;
-    for (const row of sampleTwoResult.rows) {
+    for (const row of sampleThreeResult.rows) {
       wWd += row.t * Math.max(0, row.withdrawalOut);
       tWd += Math.max(0, row.withdrawalOut);
     }
@@ -294,9 +294,9 @@ describe('tier attribution — analytic removal of a tier', () => {
   });
 
   it('splits the portfolio-level deposit profit across tiers by their balances', () => {
-    const attr = tierAttribution(sampleTwoResult.rows, tierColor);
-    const totalProfit = sampleTwoResult.rows.reduce((s, r) => s + r.profitPaid, 0);
-    assert.ok(totalProfit > 0, 'the sampleTwo preset pays deposit profit');
+    const attr = tierAttribution(sampleThreeResult.rows, tierColor);
+    const totalProfit = sampleThreeResult.rows.reduce((s, r) => s + r.profitPaid, 0);
+    assert.ok(totalProfit > 0, 'the sampleThree preset pays deposit profit');
     const attributed = attr.tiers.reduce((s, t) => s + t.profit, 0);
     assert.ok(
       near(attributed + attr.unattributedProfit, totalProfit, 1e-9),

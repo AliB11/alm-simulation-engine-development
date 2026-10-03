@@ -109,45 +109,6 @@ describe('scenario import validation', () => {
     }
   });
 
-  it('migrates the old seven-tier sample three into the new Negin Farapouya sample two', () => {
-    const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-    const saved = JSON.stringify({
-      activePreset: 'sample-3',
-      config: {
-        ...DEFAULT_CONFIG,
-        contractType: 'murabaha',
-        murabahaRate: 21,
-        loanCap: 400_000_000,
-        depositProfitRate: 0.1,
-      },
-      tiers: Array.from({ length: 7 }, (_, index) => ({
-        id: `legacy-${index}`,
-        tDep: 2 + index,
-        tLoan: [16, 24, 32, 40, 48, 56, 60][index],
-        alpha: 25 + index * 25,
-        allocation: [30, 20, 16, 13, 9, 7, 5][index],
-        rateOverride: 5 + index * 3,
-      })),
-    });
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: { getItem: () => saved } as unknown as Storage,
-    });
-    try {
-      const state = loadState();
-      const currentPreset = PRESETS.find((preset) => preset.key === 'sample-3');
-      assert.ok(currentPreset);
-      assert.equal(state?.activePreset, 'sample-3');
-      assert.equal(state?.tiers?.length, currentPreset.tiers.length);
-      assert.equal(state?.config?.murabahaRate, currentPreset.rate);
-      assert.equal(state?.config?.minLoan, currentPreset.minLoan);
-      assert.equal(state?.config?.depositProfitRate, currentPreset.depositProfitRate);
-    } finally {
-      if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
-      else Reflect.deleteProperty(globalThis, 'localStorage');
-    }
-  });
-
   it('does not regenerate a saved custom design as the preset when its fee is not a product option', () => {
     const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
     const saved = JSON.stringify({
@@ -193,7 +154,7 @@ describe('scenario import validation', () => {
     }
   });
 
-  it('refreshes active sample-one and sample-two tiers after their terms change, preserving user configuration', () => {
+  it('refreshes active sample-one and sample-three tiers after their terms change, preserving user configuration', () => {
     const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
     let saved = '';
     Object.defineProperty(globalThis, 'localStorage', {

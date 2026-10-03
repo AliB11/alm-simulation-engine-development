@@ -8,7 +8,7 @@
 
 import type { Behavior, DepositSchedule, GlobalConfig, SimInput, SimKpis, SimResult, Tier } from '../types';
 import { simulate } from './engine';
-import { fmtNumber, minDigitsFor, toFa } from './format';
+import { fmtNumber, toFa } from './format';
 
 export type SlotId = 'A' | 'B' | 'C';
 
@@ -106,12 +106,7 @@ export function configDiffs(a: ScenarioSlot, b: ScenarioSlot): string[] {
   const out: string[] = [];
   const fmt = (v: number, digits: number) => (digits === 0 ? fmtNumber(Math.round(v)) : fmtNumber(v, digits, true));
   const num = (label: string, x: number, y: number, digits = 1) => {
-    if (Math.abs(x - y) > 1e-9) {
-      // اعشار هر دو سمت با هم بالا می‌رود تا مقدار کوچک‌تر به صفر گرد نشود؛
-      // وگرنه تفاوتِ نرخ‌هایی مثل سود علی‌الحساب ۰٫۰۱٪ به «۰٫۰ به ۰٫۰» نوشته می‌شد.
-      const d = Math.max(digits, minDigitsFor(x, digits), minDigitsFor(y, digits));
-      out.push(`${label}: ${fmt(x, d)} به ${fmt(y, d)}`);
-    }
+    if (Math.abs(x - y) > 1e-9) out.push(`${label}: ${fmt(x, digits)} به ${fmt(y, digits)}`);
   };
   const contractName = (t: string) => (t === 'murabaha' ? 'مرابحه' : 'قرض‌الحسنه');
   num('افق', a.config.horizon, b.config.horizon, 0);
@@ -119,7 +114,6 @@ export function configDiffs(a: ScenarioSlot, b: ScenarioSlot): string[] {
   num('سپرده قانونی', a.config.reserveRatio, b.config.reserveRatio);
   num('نرخ قرارداد', a.config.contractType === 'qard' ? a.config.qardFeeRate : a.config.murabahaRate, b.config.contractType === 'qard' ? b.config.qardFeeRate : b.config.murabahaRate);
   num('سقف وام', a.config.loanCap, b.config.loanCap, 0);
-  num('حداقل مبلغ وام', a.config.minLoan, b.config.minLoan, 0);
   num('نکول', a.config.defaultRate, b.config.defaultRate);
   num('LGD', a.config.lgdRate, b.config.lgdRate);
   num('مهلت سوخت', a.config.writeOffLag, b.config.writeOffLag, 0);

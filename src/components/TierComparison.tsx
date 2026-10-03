@@ -163,7 +163,7 @@ export function TierComparison({
                   </td>
                   <td className={td}>
                     {!r.eligible ? (
-                      r.belowMinimumLoan ? <Badge tone="amber">زیر حداقل مبلغ</Badge> : <Badge tone="rose">زیر حداقل مانده</Badge>
+                      <Badge tone="rose">زیر حداقل مانده</Badge>
                     ) : r.capped ? (
                       <Badge tone="amber">مشمول سقف فردی</Badge>
                     ) : (
@@ -180,7 +180,6 @@ export function TierComparison({
         <p>
           <b>ROI</b> = کل کارمزد یا سود ÷ مبلغ وام · <b>IRR</b> = نرخ مؤثر سالانه جریان (+L ، −PMT × T) ·{' '}
           <b>مبلغ وام</b> = min(سپرده نمونه × α ، سقف فردی {config.loanCap > 0 ? <Money value={config.loanCap} unit /> : 'نامحدود'})
-          {config.minLoan > 0 && <> · کف پرداخت <Money value={config.minLoan} unit /></>}
         </p>
         <p>
           * هزینه واقعی مشتری: IRR پس از کسر هزینه فرصت سپرده در دوره انتظار با نرخ {fmtPct(config.opportunityRate)} سالانه؛

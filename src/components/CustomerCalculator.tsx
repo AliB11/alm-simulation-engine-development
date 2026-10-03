@@ -213,12 +213,7 @@ export function CustomerCalculator({ tiers, config }: Props) {
           <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm leading-7 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
             <CircleAlert className="mt-1 h-5 w-5 shrink-0" />
             <div>
-              {estimate.belowMinimumLoan ? (
-                <>
-                  مبلغ خام این حالت <Money value={estimate.rawLoan} unit /> است و به حداقل مبلغ تسهیلات محصول،{' '}
-                  <b><Money value={estimate.minimumLoan} unit /></b>، نمی‌رسد؛ بنابراین فعلاً برای این میانگین سپرده تسهیلاتی برآورد نمی‌شود.
-                </>
-              ) : depositBalance <= 0 ? (
+              {depositBalance <= 0 ? (
                 <>
                   مبلغ سپرده را وارد کنید تا برآورد انجام شود. حداقل میانگین مانده برای {selected.label}{' '}
                   <Money value={selected.tier.minBalance} unit /> است.

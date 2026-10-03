@@ -271,7 +271,6 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
   const lgd = bounded(config.lgdRate, 0, 100, 100) / 100;
   const writeOffLag = Math.round(bounded(config.writeOffLag, 0, MAX_MONTHS, 12));
   const loanCap = bounded(config.loanCap, 0, MAX_MONEY, 0);
-  const minLoan = bounded(config.minLoan, 0, MAX_MONEY, 0);
   const avgTicket = bounded(behavior.avgTicket, 0, MAX_MONEY, 0);
   const initLiq = bounded(config.initialLiquidity, -MAX_MONEY, MAX_MONEY, 0);
   const totalDepositInput = bounded(behavior.totalDeposit, 0, MAX_MONEY, 0);
@@ -358,10 +357,7 @@ export function simulate(input: SimInput, withDetails = true): SimResult {
     const { alpha, binding, repBalance } = effectiveAlpha(tier, loanCap, avgTicket);
     const minBalance = bounded(tier.minBalance, 0, MAX_MONEY, 0);
     const eligible = avgTicket >= minBalance; // فقط سپرده‌گذار واجد حداقل مانده امکان دریافت وام دارد
-    // کف مبلغ تسهیلاتِ محصول نیز مانند حداقل مانده، پیش از تشکیل تعهد اعمال می‌شود:
-    // اگر وام نمایندهٔ یک مشتری به کف نرسد، آن پله وامی اعطا نمی‌کند و فقط churn دارد.
-    const meetsMinLoan = minLoan <= 0 || repBalance * alpha >= minLoan;
-    const lends = eligible && alpha > 0 && meetsMinLoan; // آیا این پله اساساً تسهیلاتی اعطا می‌کند؟
+    const lends = eligible && alpha > 0; // آیا این پله اساساً تسهیلاتی اعطا می‌کند؟
     const wTier = tierWithdrawalFactor(behavior, lends);
     const rate = tierRate(tier, config);
     const T = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
@@ -630,12 +626,9 @@ export const annualize = (i: number) => Math.pow(1 + i, 12) - 1;
 export interface TierOfferEstimate {
   rate: number;
   eligible: boolean;
-  /** مشتری به‌دلیل کف مبلغ تسهیلات از حالت خارج شده است */
-  belowMinimumLoan: boolean;
   rawLoan: number;
   loan: number;
   capped: boolean;
-  minimumLoan: number;
   monthlyPayment: number;
   totalRepayment: number;
   totalCharge: number;
@@ -646,26 +639,21 @@ export function estimateTierOffer(tier: Tier, config: GlobalConfig, depositBalan
   const balance = bounded(depositBalance, 0, MAX_MONEY, 0);
   const cap = bounded(config.loanCap, 0, MAX_MONEY, 0);
   const minimum = bounded(tier.minBalance, 0, MAX_MONEY, 0);
-  const minimumLoan = bounded(config.minLoan, 0, MAX_MONEY, 0);
   const months = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
   const rate = tierRate(tier, config);
-  const balanceEligible = balance > 0 && balance >= minimum;
-  const rawLoan = balanceEligible ? (balance * Math.max(0, finite(tier.alpha, 0))) / 100 : 0;
-  const belowMinimumLoan = balanceEligible && minimumLoan > 0 && rawLoan < minimumLoan;
-  const eligible = balanceEligible && !belowMinimumLoan;
-  const capped = eligible && cap > 0 && rawLoan > cap;
-  const loan = !eligible ? 0 : capped ? cap : rawLoan;
+  const eligible = balance > 0 && balance >= minimum;
+  const rawLoan = eligible ? (balance * Math.max(0, finite(tier.alpha, 0))) / 100 : 0;
+  const capped = cap > 0 && rawLoan > cap;
+  const loan = capped ? cap : rawLoan;
   const monthlyPayment = calcPmt(config.contractType === 'murabaha' ? 'murabaha' : 'qard', loan, months, rate);
   const totalRepayment = monthlyPayment * months;
 
   return {
     rate,
     eligible,
-    belowMinimumLoan,
     rawLoan,
     loan,
     capped,
-    minimumLoan,
     monthlyPayment,
     totalRepayment,
     totalCharge: totalRepayment - loan,
@@ -677,7 +665,6 @@ export interface SampleRow {
   index: number;
   rate: number;
   eligible: boolean;
-  belowMinimumLoan: boolean;
   rawLoan: number;
   loan: number;
   capped: boolean;
@@ -698,17 +685,7 @@ export function sampleComparison(tiers: Tier[], config: GlobalConfig, sample: nu
     const offer = estimateTierOffer(tier, config, S);
     const T = Math.round(bounded(tier.tLoan, 1, MAX_MONTHS, 12));
     const tDep = bounded(tier.tDep, TIER_WAIT_MIN, TIER_WAIT_MAX, TIER_WAIT_MIN);
-    const {
-      rate,
-      eligible,
-      belowMinimumLoan,
-      rawLoan,
-      loan,
-      capped,
-      monthlyPayment: pmt,
-      totalRepayment: totalRepay,
-      totalCharge: totalFee,
-    } = offer;
+    const { rate, eligible, rawLoan, loan, capped, monthlyPayment: pmt, totalRepayment: totalRepay, totalCharge: totalFee } = offer;
     const roi = loan > 0 ? totalFee / loan : 0;
     const i = solveMonthlyRate(loan, pmt, T);
     const oppCost = eligible ? S * (Math.pow(1 + oppRate / 1200, tDep) - 1) : 0;
@@ -719,7 +696,6 @@ export function sampleComparison(tiers: Tier[], config: GlobalConfig, sample: nu
       index,
       rate,
       eligible,
-      belowMinimumLoan,
       rawLoan,
       loan,
       capped,

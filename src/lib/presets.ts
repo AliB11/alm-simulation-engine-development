@@ -68,28 +68,19 @@ export interface Preset {
   repaymentTerms?: readonly number[];
   /** سقف کل گزارش‌شدهٔ محصول برای نمایش اطلاع‌رسانی؛ محدودیت تجمیعی موتور نیست */
   programCap?: number;
-  /** حداقل مبلغ تسهیلات محصول (تومان)؛ صفر/خالی یعنی بدون کف */
-  minLoan?: number;
   /** دامنه‌های نمایشی مشخصات همین الگو (به‌ترتیب: حداقل، حداکثر) */
   waitingRange?: PresetRange;
   alphaRange?: PresetRange;
   /** ضریب برابری بر اساس کارمزد انتخاب‌شده؛ برای حالت‌های قرض‌الحسنهٔ نمونهٔ اول */
   rateAlphaRanges?: Readonly<Record<number, PresetRange>>;
   tierRateRange?: PresetRange;
-  /**
-   * قاعدهٔ خودِ محصول برای مجازبودن یک ترکیب «دورهٔ انتظار / دورهٔ بازپرداخت».
-   * سازندهٔ پله‌ها با آن به ویرایش‌های خارج از قاعده هشدار می‌دهد (بدون مسدودسازی).
-   */
-  modeFeasible?: (tDep: number, tLoan: number) => boolean;
-  /** متن کوتاه همان قاعده برای راهنمای هشدار */
-  modeRule?: string;
   /** نرخ سود پرداختی روی خود سپرده؛ صفر یعنی الگوی سپرده بدون سود */
   depositProfitRate: number;
   tiers: Omit<Tier, 'id'>[];
 }
 
 const SAMPLE_ONE_REPAYMENT_TERMS = [12, 24, 36, 48, 60] as const;
-const SAMPLE_TWO_REPAYMENT_TERMS = [16, 24, 32, 40, 48, 56, 60] as const;
+const SAMPLE_THREE_REPAYMENT_TERMS = [16, 24, 32, 40, 48, 56, 60] as const;
 
 /** ضریب مقیاسِ نسبت تسهیلات به میانگین سپرده در کارمزدهای منتشرشده */
 const SAMPLE_ONE_ALPHA_FACTORS: Readonly<Record<number, number>> = { 0: 150, 2: 200, 4: 240 };
@@ -130,187 +121,10 @@ function sampleOneTiers(feeRate: number): Omit<Tier, 'id'>[] {
   return tiers;
 }
 
-/* ----------------------- نمونهٔ دوم: نگین فراپویا ----------------------- */
-
-/**
- * پارامترهای منتشرشدهٔ محصول «نگین فراپویا» بانک سپه (مرابحهٔ سپرده‌محور،
- * ویژهٔ اشخاص حقیقی، با حساب کوتاه‌مدت ماه‌شمارِ ویژهٔ طرح و قابلیت واریز/برداشت):
- *
- *   • دورهٔ میانگین‌گیری (انتظار): ۲ تا ۱۲ ماه
- *   • اقساط مجاز: ۱۶/۲۴/۳۲/۴۰/۴۸/۵۶/۶۰ ماه
- *   • ضریب تسهیلات به میانگین سپرده: ۲۵٪ تا ۲۰۰٪
- *   • نرخ سود تسهیلات: ۵٪ تا ۲۳٪
- *   • حداقل میانگین سپرده برای بهره‌مندی: ۱۰ میلیون ریال (۱ میلیون تومان)
- *   • حداقل مبلغ تسهیلات ۱۰۰ میلیون ریال و سقف فردی ۴ میلیارد ریال (۴۰۰ میلیون تومان)
- *   • نرخ سود علی‌الحساب خودِ سپرده: ۰٫۰۱٪
- *   • قاعدهٔ امتیاز: به ازای هر ماه انتظارِ بیشتر از حداقلِ ۲ ماه، یکی از سه مزیت
- *     زیر (یا ترکیبی از آن‌ها) به متقاضی می‌رسد:
- *       ۱) ۸ ماه افزودن به دورهٔ بازپرداخت، تا سقف ۶۰ ماه
- *       ۲) ۲۵ واحد درصد افزودن به ضریب تسهیلات، تا سقف ۲۰۰٪
- *       ۳) ۲ واحد درصد کاستن از نرخ سود، تا کف ۵٪
- *     و اقساط بالاتر از ۴۸ ماه فقط شامل حالت‌هایی با انتظارِ بیش از ۲ ماه می‌شود.
- *
- * منابع: سامانهٔ تسهیلاتی سپه (vamyarsepah.com)، بنکر ۶ شهریور ۱۴۰۵،
- * اقتصادآنلاین و نواندیش شهریور ۱۴۰۵، بانک‌اول ۱۴۰۵.
- */
-export const FARAPOUYA = {
-  minWait: 2,
-  maxWait: 12,
-  terms: SAMPLE_TWO_REPAYMENT_TERMS,
-  /** سقف اقساط در حداقل انتظار (۲ ماه) */
-  baseTerm: 48,
-  termStep: 8,
-  maxTerm: 60,
-  alphaBase: 25,
-  alphaStep: 25,
-  alphaCap: 200,
-  rateBase: 23,
-  rateStep: 2,
-  rateFloor: 5,
-  minBalance: 1_000_000,
-  minLoan: 10_000_000,
-  loanCap: 400_000_000,
-  depositProfitRate: 0.01,
-} as const;
-
-/** تعداد گام لازم برای رسیدن هر مزیت به کران منتشرشده‌اش (۹ گام تا کف ۵٪ و ۷ گام تا سقف ۲۰۰٪) */
-export const FARAPOUYA_RATE_STEPS = (FARAPOUYA.rateBase - FARAPOUYA.rateFloor) / FARAPOUYA.rateStep;
-export const FARAPOUYA_ALPHA_STEPS = (FARAPOUYA.alphaCap - FARAPOUYA.alphaBase) / FARAPOUYA.alphaStep;
-
-function intInRange(value: number, min: number, max: number, fallback: number): number {
-  const n = Number.isFinite(value) ? Math.round(value) : fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-/** امتیاز کسب‌شده از انتظار: هر ماه بیش از حداقل دورهٔ میانگین‌گیری (۲ ماه) = یک امتیاز */
-export function farapouyaPoints(waitingMonths: number): number {
-  return intInRange(waitingMonths, FARAPOUYA.minWait, FARAPOUYA.maxWait, FARAPOUYA.minWait) - FARAPOUYA.minWait;
-}
-
-/** امتیازی که یک دورهٔ بازپرداختِ بالاتر از سقف پایه (۴۸ ماه) مصرف می‌کند */
-export function farapouyaTermPoints(repaymentMonths: number): number {
-  const term = intInRange(repaymentMonths, 0, FARAPOUYA.maxTerm, FARAPOUYA.baseTerm);
-  if (term <= FARAPOUYA.baseTerm) return 0;
-  return Math.ceil((term - FARAPOUYA.baseTerm) / FARAPOUYA.termStep);
-}
-
-/** سقف دورهٔ بازپرداختِ مجاز برای یک دورهٔ انتظار مشخص */
-export function farapouyaTermCeiling(waitingMonths: number): number {
-  return Math.min(FARAPOUYA.maxTerm, FARAPOUYA.baseTerm + FARAPOUYA.termStep * farapouyaPoints(waitingMonths));
-}
-
-/** آیا این ترکیبِ انتظار/اقساط طبق قاعدهٔ محصول مجاز است؟ */
-export function farapouyaFeasible(waitingMonths: number, repaymentMonths: number): boolean {
-  return farapouyaTermPoints(repaymentMonths) <= farapouyaPoints(waitingMonths);
-}
-
-export interface FarapouyaMode {
-  /** دورهٔ انتظار (ماه) */
-  waiting: number;
-  /** دورهٔ بازپرداخت (ماه) */
-  term: number;
-  /** امتیاز کسب‌شده از انتظار */
-  points: number;
-  /** امتیاز مصرف‌شده برای اقساط */
-  termPoints: number;
-  /** امتیاز باقی‌مانده برای ضریب و نرخ */
-  freePoints: number;
-  /** گام‌های کاهش نرخ */
-  rateSteps: number;
-  /** گام‌های افزایش ضریب */
-  alphaSteps: number;
-  /** ضریب تسهیلات به میانگین سپرده (درصد) */
-  alpha: number;
-  /** نرخ سود مرابحه (درصد) */
-  rate: number;
-  feasible: boolean;
-}
-
-/**
- * بازسازی یک حالت از محصول نگین فراپویا.
- *
- * امتیاز باقی‌مانده پس از خریدِ اقساط، با «سیاست ترکیبیِ متناسب» بین کاهش نرخ و
- * افزایش ضریب تقسیم می‌شود: سهم هر مزیت به نسبت هزینهٔ کاملِ همان مزیت است
- * (۹ گام برای رسیدن نرخ به کف ۵٪ و ۷ گام برای رسیدن ضریب به سقف ۲۰۰٪)، پس هر دو
- * مزیت با یک سرعت نسبی پیش می‌روند. این یک بازسازی شفافِ موتور است، نه جدول رسمی
- * قرارداد؛ جدول کامل حالت‌های بانک منتشر نشده و هر دو فیلد در رابط کاربری
- * قابل‌ویرایش‌اند. توجه: رسیدنِ هم‌زمان به ضریب ۲۰۰٪ و نرخ ۵٪ به ۱۶ امتیاز
- * (۱۸ ماه انتظار) نیاز دارد و با سقفِ ۱۲ ماهِ محصول ممکن نیست.
- */
-export function farapouyaMode(waitingMonths: number, repaymentMonths: number): FarapouyaMode {
-  const waiting = intInRange(waitingMonths, FARAPOUYA.minWait, FARAPOUYA.maxWait, FARAPOUYA.minWait);
-  const term = intInRange(repaymentMonths, 0, FARAPOUYA.maxTerm, FARAPOUYA.baseTerm);
-  const points = waiting - FARAPOUYA.minWait;
-  const termPoints = farapouyaTermPoints(term);
-  const freePoints = Math.max(0, points - termPoints);
-  const rateSteps = Math.min(
-    FARAPOUYA_RATE_STEPS,
-    Math.round((freePoints * FARAPOUYA_RATE_STEPS) / (FARAPOUYA_RATE_STEPS + FARAPOUYA_ALPHA_STEPS)),
-  );
-  const alphaSteps = Math.min(FARAPOUYA_ALPHA_STEPS, freePoints - rateSteps);
-  return {
-    waiting,
-    term,
-    points,
-    termPoints,
-    freePoints,
-    rateSteps,
-    alphaSteps,
-    alpha: Math.min(FARAPOUYA.alphaCap, FARAPOUYA.alphaBase + FARAPOUYA.alphaStep * alphaSteps),
-    rate: Math.max(FARAPOUYA.rateFloor, FARAPOUYA.rateBase - FARAPOUYA.rateStep * rateSteps),
-    feasible: termPoints <= points,
-  };
-}
-
-/** ضریب بازسازی‌شدهٔ یک حالت (درصد) */
-export function farapouyaAlpha(waitingMonths: number, repaymentMonths: number): number {
-  return farapouyaMode(waitingMonths, repaymentMonths).alpha;
-}
-
-/** نرخ سود بازسازی‌شدهٔ یک حالت (درصد) */
-export function farapouyaRate(waitingMonths: number, repaymentMonths: number): number {
-  return farapouyaMode(waitingMonths, repaymentMonths).rate;
-}
-
-/**
- * همهٔ حالت‌های مجاز محصول به‌ترتیب انتظار و سپس اقساط.
- * ۱۱ دورهٔ انتظار × ۷ دورهٔ بازپرداخت = ۷۷ ترکیب که ۳ ترکیب ناموجه آن
- * (۵۶ و ۶۰ قسط در انتظار ۲ ماه، و ۶۰ قسط در انتظار ۳ ماه) حذف می‌شوند: ۷۴ حالت.
- */
-export function farapouyaModes(): FarapouyaMode[] {
-  const modes: FarapouyaMode[] = [];
-  for (let waiting = FARAPOUYA.minWait; waiting <= FARAPOUYA.maxWait; waiting++) {
-    for (const term of FARAPOUYA.terms) {
-      const mode = farapouyaMode(waiting, term);
-      if (mode.feasible) modes.push(mode);
-    }
-  }
-  return modes;
-}
-
-function sampleTwoTiers(): Omit<Tier, 'id'>[] {
-  const modes = farapouyaModes();
-  const allocation = 100 / modes.length;
-  return modes.map((mode, index) => ({
-    name: tierLabel(index),
-    tDep: mode.waiting,
-    tLoan: mode.term,
-    alpha: mode.alpha,
-    minBalance: FARAPOUYA.minBalance,
-    allocation,
-    rateOverride: mode.rate,
-  }));
-}
-
-/** قاعدهٔ اقساط/انتظار نگین فراپویا، برای راهنمای هشدار در سازندهٔ پله‌ها */
-const FARAPOUYA_MODE_RULE =
-  'طبق قاعدهٔ محصول، هر ماه انتظار بیشتر از ۲ ماه یک امتیاز می‌سازد: ۸ ماه اقساط بیشتر (تا سقف ۶۰)، یا ۲۵ واحد درصد ضریب بیشتر (تا ۲۰۰٪)، یا ۲ واحد درصد نرخ کمتر (تا کف ۵٪). اقساط ۵۶ به انتظار دست‌کم ۳ ماه و اقساط ۶۰ به انتظار دست‌کم ۴ ماه نیاز دارد.';
-
 /**
  * دو الگوی قابل‌ویرایش برای شروع طراحی محصول.
  * طرح اول همهٔ ۹۰ جفتِ دورهٔ انتظار/بازپرداخت را نگه می‌دارد؛ نسبت‌ها از دامنه‌های
  * گزارش‌شده بازسازی شده‌اند و تخصیص برابر صرفاً پیش‌فرض شبیه‌سازی است.
- * طرح دوم ۷۴ حالتِ مجازِ نگین فراپویا را از قاعدهٔ امتیازِ همان محصول می‌سازد.
  */
 export const PRESETS: Preset[] = [
   {
@@ -326,31 +140,32 @@ export const PRESETS: Preset[] = [
     alphaRange: SAMPLE_ONE_ALPHA_RANGES[2],
     rateAlphaRanges: SAMPLE_ONE_ALPHA_RANGES,
     programCap: 1_000_000_000,
-    minLoan: 0,
     loanCap: 300_000_000,
     depositProfitRate: 0,
     tiers: sampleOneTiers(2),
   },
   {
-    /* کلید داخلی `sample-3` ثابت می‌ماند تا سناریوهای ذخیره‌شده در حافظهٔ مرورگر و
-       فایل‌های خروجیِ نسخه‌های پیشین نشکنند؛ فقط برچسب فارسیِ الگو از
-       برچسب قدیمیِ این الگو به «نمونه طرح دوم» تغییر کرده است. */
     key: 'sample-3',
-    name: 'نمونه طرح دوم',
+    name: 'نمونه طرح سوم',
     description:
-      'نگین فراپویا بانک سپه: ۷۴ حالتِ مجاز از ۱۱ دورهٔ انتظار (۲ تا ۱۲ ماه) × ۷ دورهٔ بازپرداخت (۱۶ تا ۶۰ ماه)؛ امتیاز هر ماه انتظارِ بیشتر بین افزایش ضریب (تا ۲۰۰٪)، کاهش نرخ (تا کف ۵٪) و افزایش اقساط (تا ۶۰ ماه) تقسیم می‌شود. سهم برابر حالت‌ها فقط فرض آغازین شبیه‌سازی است، نه ترکیب رسمی مشتریان.',
+      'الگوی مرابحهٔ ۷ پله‌ای؛ انتظار از ۲ تا ۱۲ ماه، اقساط ۱۶/۲۴/۳۲/۴۰/۴۸/۵۶/۶۰ ماه، ضریب برابری ۲۵٪ تا ۲۰۰٪ و نرخ اختصاصی ۵٪ تا ۲۳٪. سهم‌های تخصیص، فرض‌های آموزشی و قابل‌ویرایش‌اند.',
     contractType: 'murabaha',
-    rate: FARAPOUYA.rateBase,
-    repaymentTerms: SAMPLE_TWO_REPAYMENT_TERMS,
-    waitingRange: [FARAPOUYA.minWait, FARAPOUYA.maxWait],
-    alphaRange: [FARAPOUYA.alphaBase, FARAPOUYA.alphaCap],
-    tierRateRange: [FARAPOUYA.rateFloor, FARAPOUYA.rateBase],
-    modeFeasible: farapouyaFeasible,
-    modeRule: FARAPOUYA_MODE_RULE,
-    minLoan: FARAPOUYA.minLoan,
-    loanCap: FARAPOUYA.loanCap,
-    depositProfitRate: FARAPOUYA.depositProfitRate,
-    tiers: sampleTwoTiers(),
+    rate: 21,
+    repaymentTerms: SAMPLE_THREE_REPAYMENT_TERMS,
+    waitingRange: [2, 12],
+    alphaRange: [25, 200],
+    tierRateRange: [5, 23],
+    loanCap: 400_000_000,
+    depositProfitRate: 0.1,
+    tiers: [
+      { name: tierLabel(0), tDep: 2, tLoan: 16, alpha: 25, minBalance: 1_000_000, allocation: 30, rateOverride: 5 },
+      { name: tierLabel(1), tDep: 3, tLoan: 24, alpha: 50, minBalance: 1_000_000, allocation: 20, rateOverride: 8 },
+      { name: tierLabel(2), tDep: 4, tLoan: 32, alpha: 75, minBalance: 1_000_000, allocation: 16, rateOverride: 11 },
+      { name: tierLabel(3), tDep: 6, tLoan: 40, alpha: 100, minBalance: 1_000_000, allocation: 13, rateOverride: 14 },
+      { name: tierLabel(4), tDep: 8, tLoan: 48, alpha: 125, minBalance: 1_000_000, allocation: 9, rateOverride: 17 },
+      { name: tierLabel(5), tDep: 10, tLoan: 56, alpha: 160, minBalance: 1_000_000, allocation: 7, rateOverride: 20 },
+      { name: tierLabel(6), tDep: 12, tLoan: 60, alpha: 200, minBalance: 1_000_000, allocation: 5, rateOverride: 23 },
+    ],
   },
 ];
 
@@ -369,7 +184,6 @@ export const DEFAULT_CONFIG: GlobalConfig = {
   murabahaRate: 21,
   reserveRatio: 10,
   loanCap: 300_000_000,
-  minLoan: 0,
   horizon: 60,
   initialLiquidity: 0,
   releaseReserve: false,
