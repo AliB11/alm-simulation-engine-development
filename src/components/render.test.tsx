@@ -22,11 +22,12 @@ import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
 import { PRESETS, tierColor } from '../lib/presets';
-import { fmtRaw } from '../lib/format';
+import { fmtRaw, toFa } from '../lib/format';
 import { TIER_WAIT_MAX } from '../lib/limits';
 import { TierBuilder } from './TierBuilder';
 import { OptimizerResultTable, OptimizerSummary, resultHeadline } from './OptimizerPanel';
 import { DEFAULT_CONSTRAINTS, designTiers, optimizeDesign } from '../lib/optimizer';
+import { isNegligible, runTornado } from '../lib/tornado';
 
 /**
  * آزمون دود (smoke) رابط کاربری.
@@ -121,18 +122,34 @@ suite('UI smoke — server render of every section', () => {
     }
   });
 
-  test('customer calculator supports the 18-month wait and all Negin repayment options', () => {
+  test('customer calculator offers every waiting rung of the sample and the terms that rung defines', () => {
+    /* طرح نمونه اول شش ردهٔ انتظار پله‌ای دارد (۱ تا ۱۸ ماه) و هر رده یک دورهٔ
+       بازپرداخت مشخص؛ پس محاسبه‌گر باید همهٔ رده‌ها را پیشنهاد بدهد و برای هر
+       رده دقیقاً همان اقساط تعریف‌شده را نشان دهد — نه بیشتر و نه کمتر. */
     const input = presetInput('sample-1');
-    const maxWaitTiers = input.tiers.filter((tier) => tier.tDep === 18);
-    const html = render(<CustomerCalculator tiers={maxWaitTiers} config={input.config} />);
-    assert.match(html, /<option value="18"[^>]*>۱۸ ماه<\/option>/, 'the 18-month waiting option must be selectable');
+    const html = render(<CustomerCalculator tiers={input.tiers} config={input.config} />);
+    const waits = [...new Set(input.tiers.map((tier) => Math.round(tier.tDep)))].sort((a, b) => a - b);
+    assert.deepEqual(waits, [1, 3, 6, 9, 12, 18], 'the sample must spread its waiting periods across the whole range');
+    for (const wait of waits) {
+      assert.match(html, new RegExp(`<option value="${wait}"[^>]*>${toFa(wait)} ماه<\\/option>`), `missing ${wait}-month waiting rung`);
+    }
     for (const months of [12, 24, 36, 48, 60]) {
-      assert.match(
-        html,
-        new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} قسط<\\/option>`),
-        `missing ${months}-month installment option`,
+      assert.ok(
+        input.tiers.some((tier) => tier.tLoan === months),
+        `no rung offers the published ${months}-month installment`,
       );
     }
+    // پیش‌فرض ۴ ماه در این رده‌ها نیست، پس نزدیک‌ترین رده (۳ ماه) انتخاب می‌شود
+    assert.match(html, /<option value="3" selected="">۳ ماه<\/option>/, 'the calculator must fall back to the nearest rung');
+    const top = input.tiers.filter((tier) => tier.tDep === 18);
+    assert.equal(top.length, 1, 'the longest waiting rung must be unique');
+    const topHtml = render(<CustomerCalculator tiers={top} config={input.config} />);
+    assert.match(topHtml, /<option value="18"[^>]*>۱۸ ماه<\/option>/, 'the 18-month waiting option must be selectable');
+    assert.match(
+      topHtml,
+      new RegExp(`<option value="${top[0].tLoan}"[^>]*>${fmtRaw(top[0].tLoan)} قسط<\\/option>`),
+      'the longest waiting rung must expose its own installment term',
+    );
   });
 
   test('sample plan three exposes every report rate in an enabled, editable rate field', () => {
@@ -390,15 +407,33 @@ suite('UI smoke — server render of every section', () => {
     assert.ok(html.includes('role="tooltip"'));
   });
 
-  test('the tornado table only dims drivers that are truly immaterial', () => {
-    const html = render(<TornadoPanel input={presetInput('sample-1')} />);
-    const rows = html.split('<tr');
-    const approval = rows.find((r) => r.includes('نرخ قبولی اعتباری'));
-    const dflt = rows.find((r) => r.includes('نرخ نکول اقساط'));
-    assert.ok(approval, 'the approval-rate row is missing');
-    assert.ok(dflt, 'the default-rate row is missing');
-    assert.ok(!approval!.includes('opacity-50'), 'a material driver must not be dimmed');
-    assert.ok(dflt!.includes('opacity-50'), 'an immaterial driver should stay dimmed');
+  test('the tornado table dims exactly the drivers the negligible rule flags', () => {
+    /* دیم‌بودن هر ردیف باید با همان قاعدهٔ `isNegligible` بخواند؛ وگرنه رنگ
+       جدول و برچسب «کم‌اثر» می‌توانند از هم جدا بیفتند. */
+    const expectDimming = (input: ReturnType<typeof presetInput>, someImmaterial: boolean) => {
+      const { base, bars } = runTornado(input, 'maxHole');
+      const totalSwing = bars.reduce((sum, bar) => sum + bar.swing, 0);
+      const html = render(<TornadoPanel input={input} />);
+      const body = html.split('<tbody>')[1]?.split('</tbody>')[0] ?? '';
+      const rows = body.split('<tr').slice(1);
+      assert.equal(rows.length, bars.length, 'every driver must have exactly one table row');
+      let dimmed = 0;
+      for (const bar of bars) {
+        const row = rows.find((candidate) => candidate.includes(bar.label));
+        assert.ok(row, `row missing for «${bar.label}»`);
+        const expected = isNegligible(bar, base, totalSwing);
+        assert.equal(row!.includes('opacity-50'), expected, `«${bar.label}»: the dimming disagrees with the negligible rule`);
+        if (expected) dimmed += 1;
+      }
+      if (someImmaterial) {
+        assert.ok(dimmed > 0, 'a portfolio without product tiers must leave immaterial drivers dimmed');
+        assert.ok(dimmed < bars.length, 'a driver that still moves the hole must stay legible');
+      } else {
+        assert.equal(dimmed, 0, 'no lever of the shipped profile is immaterial any more');
+      }
+    };
+    expectDimming(presetInput('sample-1'), false);
+    expectDimming({ ...presetInput('sample-1'), tiers: [] }, true);
   });
 
   test('an infinite exit leverage is shown as ∞ in the comparison table', () => {

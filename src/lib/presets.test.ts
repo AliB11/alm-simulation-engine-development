@@ -54,7 +54,6 @@ describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
     assert.ok(sampleOne.tiers.every((tier) => tier.tDep >= 1 && tier.tDep <= 18));
     assert.ok(sampleOne.tiers.every((tier) => terms.has(tier.tLoan)));
     assert.ok(sampleOne.tiers.every((tier) => tier.alpha >= 2.5 && tier.alpha <= 225));
-    assert.ok(sampleOne.tiers.every((tier) => tier.rateOverride === null));
     assert.equal(Math.min(...sampleOne.tiers.map((tier) => tier.tDep)), 1);
     assert.equal(Math.max(...sampleOne.tiers.map((tier) => tier.tDep)), 18);
     assert.deepEqual(
@@ -62,6 +61,33 @@ describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
       [...sampleOne.repaymentTerms],
     );
     assert.ok(Math.abs(sampleOne.tiers.reduce((sum, tier) => sum + tier.allocation, 0) - 100) < 1e-9);
+  });
+
+  it('spreads the six rungs across the advertised 1–18 month waiting range', () => {
+    /* پیش‌تر پنج رده از شش رده روی انتظار ۱۸ ماه گیر کرده بودند و کل بازهٔ
+       اعلامی محصول (۱ تا ۱۸ ماه) در طرح دیده نمی‌شد. */
+    const waits = sampleOne.tiers.map((tier) => tier.tDep);
+    assert.equal(new Set(waits).size, waits.length, 'every rung must have its own waiting period');
+    assert.deepEqual(waits, [...waits].sort((a, b) => a - b), 'rungs must be listed by rising waiting period');
+    assert.ok(
+      waits.some((wait) => wait <= 3) && waits.some((wait) => wait >= 12),
+      'the rungs must cover both ends of the advertised range',
+    );
+    const gaps = waits.slice(1).map((wait, index) => wait - waits[index]);
+    assert.ok(Math.max(...gaps) <= 6, `the rungs leave a ${Math.max(...gaps)}-month hole in the waiting range`);
+  });
+
+  it('prices the rungs with a descending fee ladder drawn from the published options', () => {
+    const fees = sampleOne.tiers.map((tier) => tier.rateOverride as number);
+    assert.ok(fees.every((fee) => sampleOne.rateOptions?.includes(fee)), 'every default fee must be a published option');
+    assert.equal(new Set(fees).size, sampleOne.rateOptions?.length, 'each published fee option must appear at least once');
+    const risingWaits = sampleOne.tiers.map((tier) => tier.tDep);
+    assert.deepEqual(risingWaits, [...risingWaits].sort((a, b) => a - b));
+    assert.ok(
+      fees.every((fee, index) => index === 0 || fee <= fees[index - 1]),
+      'the default fee must never rise with the waiting period',
+    );
+    assert.ok(fees[0] > fees[fees.length - 1], 'the shortest wait must default to the highest fee');
   });
 });
 

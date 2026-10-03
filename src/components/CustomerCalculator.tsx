@@ -37,11 +37,15 @@ export function CustomerCalculator({ tiers, config }: Props) {
       ).sort((a, b) => a - b),
     [tiers],
   );
+  /* اگر دورهٔ پیش‌فرض (۴ ماه) در پله‌های این طرح نبود، نزدیک‌ترین رده انتخاب
+     می‌شود تا محاسبه‌گر روی رده‌های دو سر بازه نیفتد. */
   const selectedWaiting = waitingOptions.includes(waitingMonths)
     ? waitingMonths
-    : waitingOptions.includes(4)
-      ? 4
-      : (waitingOptions[0] ?? null);
+    : waitingOptions.length > 0
+      ? waitingOptions.reduce((best, option) =>
+          Math.abs(option - waitingMonths) < Math.abs(best - waitingMonths) ? option : best,
+        )
+      : null;
 
   const repaymentOptions = useMemo(
     () =>
