@@ -22,6 +22,7 @@ import {
   PRESETS,
   labelTiers,
   presetTiers,
+  sampleOneAlpha,
   tierColor,
 } from './lib/presets';
 import {
@@ -72,7 +73,11 @@ export default function App() {
 
   const [config, setConfig] = useState<GlobalConfig>(() => ({ ...DEFAULT_CONFIG, ...(saved?.config ?? {}) }));
   const [tiers, setTiersState] = useState<Tier[]>(() =>
-    labelTiers(saved?.tiers && saved.tiers.length > 0 ? saved.tiers : presetTiers(DEFAULT_PRESET)),
+    labelTiers(
+      saved?.tiers && saved.tiers.length > 0
+        ? saved.tiers
+        : presetTiers(DEFAULT_PRESET, saved?.config?.qardFeeRate ?? DEFAULT_CONFIG.qardFeeRate),
+    ),
   );
   const [behavior, setBehavior] = useState<Behavior>(() => ({ ...DEFAULT_BEHAVIOR, ...(saved?.behavior ?? {}) }));
   const [schedule, setSchedule] = useState<DepositSchedule>(() => ({ ...DEFAULT_SCHEDULE, ...(saved?.schedule ?? {}) }));
@@ -138,11 +143,28 @@ export default function App() {
     (patch: Partial<GlobalConfig>) => {
       const preset = PRESETS.find((item) => item.key === activePreset);
       const changesContract = preset && patch.contractType && patch.contractType !== preset.contractType;
+      const nextQardFeeRate = patch.qardFeeRate;
       const customQardFee =
         preset?.rateOptions &&
-        patch.qardFeeRate !== undefined &&
-        !preset.rateOptions.includes(patch.qardFeeRate);
+        nextQardFeeRate !== undefined &&
+        !preset.rateOptions.includes(nextQardFeeRate);
       if (changesContract || customQardFee) setActivePreset(null);
+
+      // در الگوی دست‌نخوردهٔ طرح اول، کارمزد محصول ضریب هر ۹۰ حالت را نیز عوض می‌کند.
+      // پس از ویرایش پله‌ها activePreset خالی است و ضرایب کاربر دست‌نخورده می‌مانند.
+      if (
+        activePreset === 'sample-1' &&
+        !changesContract &&
+        nextQardFeeRate !== undefined &&
+        preset?.rateOptions?.includes(nextQardFeeRate)
+      ) {
+        setTiersState((current) =>
+          current.map((tier) => ({
+            ...tier,
+            alpha: sampleOneAlpha(tier.tDep, tier.tLoan, nextQardFeeRate),
+          })),
+        );
+      }
       setConfig((current) => ({ ...current, ...patch }));
     },
     [activePreset],
@@ -156,7 +178,7 @@ export default function App() {
   const loadPreset = useCallback((key: string) => {
     const p = PRESETS.find((x) => x.key === key);
     if (!p) return;
-    setTiersState(presetTiers(key));
+    setTiersState(presetTiers(key, p.rate));
     setConfig((c) => ({
       ...c,
       contractType: p.contractType,
@@ -171,7 +193,7 @@ export default function App() {
   const reset = useCallback(() => {
     clearState();
     setConfig(DEFAULT_CONFIG);
-    setTiersState(presetTiers(DEFAULT_PRESET));
+    setTiersState(presetTiers(DEFAULT_PRESET, DEFAULT_CONFIG.qardFeeRate));
     setBehavior(DEFAULT_BEHAVIOR);
     setSchedule(DEFAULT_SCHEDULE);
     setActivePreset(DEFAULT_PRESET);

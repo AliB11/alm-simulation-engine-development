@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { buildLedgerCsv, loadState, sanitizeSlots, sanitizeState } from './io';
-import { DEFAULT_CONFIG, PRESETS } from './presets';
+import { DEFAULT_CONFIG, presetTiers, PRESETS } from './presets';
 import { simulate } from './engine';
 import { presetInput } from './testUtils';
 
@@ -58,6 +58,23 @@ describe('scenario import validation', () => {
     assert.equal(state?.tiers?.[0].tLoan, 12, 'the imported user tier itself should be preserved');
   });
 
+  it('validates the active sample-one multiplier range against its selected fee', () => {
+    for (const feeRate of [0, 2, 4]) {
+      const state = sanitizeState({
+        activePreset: 'sample-1',
+        config: { ...DEFAULT_CONFIG, qardFeeRate: feeRate },
+        tiers: presetTiers('sample-1', feeRate),
+      });
+      assert.equal(state?.activePreset, 'sample-1', `fee ${feeRate}% must accept its own regenerated tiers`);
+    }
+    const unsupported = sanitizeState({
+      activePreset: 'sample-1',
+      config: { ...DEFAULT_CONFIG, qardFeeRate: 3 },
+      tiers: presetTiers('sample-1', 2),
+    });
+    assert.equal(unsupported?.activePreset, null, 'a custom fee must not be misidentified as the published preset');
+  });
+
   it('migrates a persisted default sample two to the new sample-one preset', () => {
     const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
     const saved = JSON.stringify({
@@ -80,7 +97,35 @@ describe('scenario import validation', () => {
       assert.equal(state?.activePreset, 'sample-1');
       assert.equal(state?.config?.loanCap, 300_000_000);
       assert.equal(state?.config?.qardFeeRate, 4, 'a supported user fee choice should be preserved');
-      assert.ok(state?.tiers?.some((tier) => tier.tDep === 18), 'the new plan-one terms should replace the removed preset tiers');
+      assert.equal(state?.tiers?.length, 90, 'the complete mode matrix should replace the removed preset tiers');
+      assert.equal(
+        state?.tiers?.find((tier) => tier.tDep === 18 && tier.tLoan === 12)?.alpha,
+        360,
+        'the preserved 4% fee must regenerate the 4%-specific multiplier matrix',
+      );
+    } finally {
+      if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+      else Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  });
+
+  it('does not regenerate a saved custom design as the preset when its fee is not a product option', () => {
+    const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    const saved = JSON.stringify({
+      activePreset: 'sample-1',
+      config: { ...DEFAULT_CONFIG, qardFeeRate: 3 },
+      tiers: [{ id: 'custom', tDep: 4, tLoan: 12, alpha: 110, allocation: 100, rateOverride: null }],
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: () => saved } as unknown as Storage,
+    });
+    try {
+      const state = loadState();
+      assert.equal(state?.activePreset, null);
+      assert.equal(state?.tiers?.length, 1, 'the user-defined tier must not be replaced with the 90-mode preset');
+      assert.equal(state?.tiers?.[0].id, 'custom');
+      assert.equal(state?.config?.qardFeeRate, 3);
     } finally {
       if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
       else Reflect.deleteProperty(globalThis, 'localStorage');

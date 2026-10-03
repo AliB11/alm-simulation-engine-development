@@ -21,9 +21,9 @@ import { MaturityLadder } from './MaturityLadder';
 import { RegulatoryPanel } from './RegulatoryPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { tierAttribution } from '../lib/attribution';
-import { PRESETS, tierColor } from '../lib/presets';
-import { fmtRaw } from '../lib/format';
-import { TIER_WAIT_MAX } from '../lib/limits';
+import { PRESETS, presetTiers, tierColor } from '../lib/presets';
+import { fmtPct, fmtRaw } from '../lib/format';
+import { TIER_ALPHA_MAX, TIER_WAIT_MAX } from '../lib/limits';
 import { TierBuilder } from './TierBuilder';
 import { OptimizerResultTable, OptimizerSummary, resultHeadline } from './OptimizerPanel';
 import { DEFAULT_CONSTRAINTS, designTiers, optimizeDesign } from '../lib/optimizer';
@@ -109,8 +109,13 @@ suite('UI smoke — server render of every section', () => {
       />,
     );
     assert.ok(builderHtml.includes('انتظار ۱–۱۸ ماه'));
+    assert.ok(builderHtml.includes('۹۰ حالت'));
+    assert.ok(builderHtml.includes('ماتریس حالت‌های نگین امید زرین'));
+    assert.ok(builderHtml.includes('α(٪) = k × T_dep / T_loan'));
+    assert.ok(builderHtml.includes('سهم آغازین هر حالت'));
+    assert.ok(builderHtml.includes(`ضریب ${fmtPct(3.33, 2)}–${fmtPct(300, 2)}`));
     assert.ok(builderHtml.includes('سقف فردی'));
-    assert.ok(builderHtml.includes('سقف کل طرح'));
+    assert.ok(builderHtml.includes('سقف گزارش‌شدهٔ طرح'));
     assert.ok(builderHtml.includes('اقساط ۱۲، ۲۴، ۳۶، ۴۸، ۶۰'));
     for (const months of [12, 24, 36, 48, 60]) {
       assert.match(
@@ -118,6 +123,32 @@ suite('UI smoke — server render of every section', () => {
         new RegExp(`<option value="${months}"[^>]*>${fmtRaw(months)} ماه<\\/option>`),
         `missing editable ${months}-month sample-one term`,
       );
+    }
+  });
+
+  test('sample-one fee selection updates the editable multiplier range and modes', () => {
+    const expected = [
+      { rate: 0, min: 2.5, max: 225 },
+      { rate: 2, min: 3.33, max: 300 },
+      { rate: 4, min: 4, max: 360 },
+    ];
+    for (const choice of expected) {
+      const tiers = presetTiers('sample-1', choice.rate);
+      const config = { ...presetInput('sample-1').config, qardFeeRate: choice.rate };
+      const result = simulate({ ...presetInput('sample-1'), config, tiers }, true);
+      const html = render(
+        <TierBuilder
+          tiers={tiers}
+          results={result.tiers}
+          config={config}
+          activePreset="sample-1"
+          onChange={() => {}}
+          onLoadPreset={() => {}}
+        />,
+      );
+      assert.ok(html.includes(`ضریب ${fmtPct(choice.min, 2)}–${fmtPct(choice.max, 2)}`));
+      assert.equal(tiers.length, 90);
+      assert.equal(tiers.find((tier) => tier.tDep === 18 && tier.tLoan === 12)?.alpha, choice.max);
     }
   });
 
@@ -186,7 +217,7 @@ suite('UI smoke — server render of every section', () => {
       for (const t of tiers) {
         assert.ok(t.tDep >= 1 && t.tDep <= TIER_WAIT_MAX, `applied waiting period out of range: ${t.tDep}`);
         assert.ok(t.tLoan >= 6 && t.tLoan <= 60, `applied repayment term out of range: ${t.tLoan}`);
-        assert.ok(t.alpha >= 2.5 && t.alpha <= 225, `applied alpha out of range: ${t.alpha}`);
+        assert.ok(t.alpha >= 2.5 && t.alpha <= TIER_ALPHA_MAX, `applied alpha out of range: ${t.alpha}`);
         assert.ok(t.rateOverride === null || (t.rateOverride >= 0 && t.rateOverride <= 60), `applied rate out of range: ${t.rateOverride}`);
       }
       applied.push(label);

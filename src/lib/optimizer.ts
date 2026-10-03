@@ -146,7 +146,14 @@ interface DesignRules {
 
 function rulesFor(input?: SimInput): DesignRules {
   if (input?.config.contractType === 'qard') {
-    return { waitMin: 1, waitMax: 18, alphaMin: 2.5, alphaMax: 225, repaymentTerms: [12, 24, 36, 48, 60] };
+    return {
+      waitMin: TIER_WAIT_MIN,
+      waitMax: TIER_WAIT_MAX,
+      // دامنهٔ عمومی را نگه می‌داریم تا حتی طراحی تک‌پله‌ای هم با اهرم α قابل‌بهینه‌سازی باشد.
+      alphaMin: TIER_ALPHA_MIN,
+      alphaMax: TIER_ALPHA_MAX,
+      repaymentTerms: [12, 24, 36, 48, 60],
+    };
   }
   const tiers = input?.tiers ?? [];
   const terms = [...new Set(tiers.map((t) => Math.round(finite(t.tLoan, 0))).filter((v) => v >= 6 && v <= 60))].sort((a, b) => a - b);
