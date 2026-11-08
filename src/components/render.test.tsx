@@ -61,9 +61,9 @@ suite('UI smoke — server render of every section', () => {
   test('renders the whole application without throwing or leaking NaN', () => {
     const html = render(<App />);
     assert.ok(html.length > 50_000, `unexpectedly small document: ${html.length}`);
-    assert.ok(html.includes('نمونه طرح اول'), 'the new default profile should be visible');
-    assert.ok(html.includes('نمونه طرح دوم'), 'the murabaha sample keeps its renumbered label');
-    assert.ok(!html.includes('نمونه طرح سوم'), 'the old «third sample» label must be gone for good');
+    assert.ok(html.includes('نمونه طرح اول'), 'the default profile should be visible');
+    assert.ok(html.includes('نمونه طرح دوم'), 'the murabaha sample should be visible');
+    assert.ok(html.includes('نمونه طرح سوم'), 'the Negin Rouyesh third sample should be visible');
     assertNoBrokenNumbers(html, 'App');
     for (const heading of [
       'تنظیمات کلان محصول',
@@ -191,6 +191,36 @@ suite('UI smoke — server render of every section', () => {
     }
   });
 
+  test('sample plan three (Negin Rouyesh) exposes its three modes with editable fields', () => {
+    const input = presetInput('sample-4');
+    const result = simulate(input, true);
+    const html = render(
+      <TierBuilder
+        tiers={input.tiers}
+        results={result.tiers}
+        config={input.config}
+        activePreset="sample-4"
+        onChange={() => {}}
+        onLoadPreset={() => {}}
+      />,
+    );
+    assert.ok(html.includes('نمونه طرح سوم'));
+    assert.ok(html.includes('نگین رویش'));
+    assert.ok(html.includes('انتظار ۹–۱۸ ماه'));
+    assert.ok(html.includes('اقساط ۱۲، ۲۴، ۳۶، ۴۸، ۶۰'));
+    assert.ok(html.includes('ضریب ۲۵۰٪–۶۰۰٪'));
+    assert.ok(html.includes('نرخ پله ۴٪–۱۵٪'));
+    assert.ok(html.includes('سقف فردی ۲۰۰ میلیون'));
+    const rateInputs = html.match(/<input\b[^>]*aria-label="نرخ اختصاصی [^"]*"[^>]*>/g) ?? [];
+    assert.equal(rateInputs.length, 3);
+    for (const rate of [4, 7, 15]) {
+      const expected = `value="${fmtRaw(rate, 2)}"`;
+      const field = rateInputs.find((tag) => tag.includes(expected));
+      assert.ok(field, `missing editable rate ${rate}% (looked for ${expected})`);
+      assert.ok(!field.includes('disabled'), `rate ${rate}% should not be locked`);
+    }
+  });
+
   test('the optimizer result views label a feasible optimum and an infeasible fallback differently', () => {
     /* رگرسیون: پیش‌تر وقتی هیچ طرحی موجه نبود، کارت همچنان عنوان «طرح بهینهٔ
        پیشنهادی» داشت و ستون شدت نقض هم وجود نداشت، پس کاربر نمی‌توانست بفهمد
@@ -274,7 +304,7 @@ suite('UI smoke — server render of every section', () => {
   });
 
   test('renders the analysis panels in both currencies and both themes', () => {
-    for (const presetKey of ['sample-1', 'sample-3'] as const) {
+    for (const presetKey of ['sample-1', 'sample-3', 'sample-4'] as const) {
       const input = presetInput(presetKey);
       const result = simulate(input, true);
       const reg = computeRegulatory(result.rows, DEFAULT_REGULATORY);

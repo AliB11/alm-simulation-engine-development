@@ -79,10 +79,11 @@ export interface Preset {
 
 const SAMPLE_ONE_REPAYMENT_TERMS = [12, 24, 36, 48, 60] as const;
 const SAMPLE_THREE_REPAYMENT_TERMS = [16, 24, 32, 40, 48, 56, 60] as const;
+const SAMPLE_FOUR_REPAYMENT_TERMS = [12, 24, 36, 48, 60] as const;
 
 /**
- * دو الگوی قابل‌ویرایش برای شروع طراحی محصول.
- * اعدادِ طرح نگین امید زرین بر پایهٔ شرایط عمومی منتشرشده چیده شده‌اند؛
+ * سه الگوی قابل‌ویرایش برای شروع طراحی محصول.
+ * اعدادِ طرح‌ها بر پایهٔ شرایط عمومی منتشرشده چیده شده‌اند؛
  * تخصیص‌ها و جفت‌کردن هر پله با یک دوره، فرض‌های شبیه‌سازی‌اند نه قرارداد بانک.
  */
 export const PRESETS: Preset[] = [
@@ -138,6 +139,27 @@ export const PRESETS: Preset[] = [
       { name: tierLabel(4), tDep: 8, tLoan: 48, alpha: 125, minBalance: 1_000_000, allocation: 9, rateOverride: 17 },
       { name: tierLabel(5), tDep: 10, tLoan: 56, alpha: 160, minBalance: 1_000_000, allocation: 7, rateOverride: 20 },
       { name: tierLabel(6), tDep: 12, tLoan: 60, alpha: 200, minBalance: 1_000_000, allocation: 5, rateOverride: 23 },
+    ],
+  },
+  {
+    /* کلید داخلی `sample-4` انتخاب شده است چون `sample-2` متعلق به الگوی قدیمیِ
+       حذف‌شده است و در `io.ts` به `sample-1` مهاجرت داده می‌شود. */
+    key: 'sample-4',
+    name: 'نمونه طرح سوم',
+    description:
+      'الهام‌گرفته از طرح «نگین رویش» بانک سپه (ویژهٔ تفاهم‌نامهٔ حق عضویت سازمانی)؛ شامل ۳ حالت با حداقل انتظار ۹ ماه: حالت اول (قرض‌الحسنه ۲۵۰٪ با کارمزد ۴٪ و بازپرداخت ۴۸ ماهه)، حالت دوم (مرابحه ۱ با ضریب ۳۰۰٪، سود ۷٪ و بازپرداخت ۶۰ ماهه) و حالت سوم (مرابحه ۲ با ضریب ۶۰۰٪، سود ۱۵٪ و بازپرداخت ۶۰ ماهه)، سقف فردی ۲۰۰ میلیون تومان و سود سپرده ۰٫۰۱٪. تمام حالات و سهم‌ها قابل‌ویرایش‌اند.',
+    contractType: 'murabaha',
+    rate: 15,
+    repaymentTerms: SAMPLE_FOUR_REPAYMENT_TERMS,
+    waitingRange: [9, 18],
+    alphaRange: [250, 600],
+    tierRateRange: [4, 15],
+    loanCap: 200_000_000,
+    depositProfitRate: 0.01,
+    tiers: [
+      { name: tierLabel(0), tDep: 9, tLoan: 48, alpha: 250, minBalance: 50_000, allocation: 40, rateOverride: 4 },
+      { name: tierLabel(1), tDep: 9, tLoan: 60, alpha: 300, minBalance: 50_000, allocation: 35, rateOverride: 7 },
+      { name: tierLabel(2), tDep: 9, tLoan: 60, alpha: 600, minBalance: 50_000, allocation: 25, rateOverride: 15 },
     ],
   },
 ];
