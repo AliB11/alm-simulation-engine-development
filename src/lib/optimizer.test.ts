@@ -20,7 +20,6 @@ import {
   violations,
 } from './optimizer';
 import { simulate } from './engine';
-import { PRESETS } from './presets';
 import { near, presetInput } from './testUtils';
 import { TIER_WAIT_MAX } from './limits';
 
@@ -168,15 +167,30 @@ describe('design optimizer — lever mechanics', () => {
     assert.equal(objectiveValue(kpis, 'safety'), -kpis.maxHole);
   });
 
-  it('ships default constraints that every sample plan can actually satisfy', () => {
+  it('ships default constraints that the stepped ladders satisfy and ranks the high-leverage plan by least violation', () => {
     // رگرسیون: سقف پیش‌فرضِ ۱۰٪ با فرض‌های رفتاری پیش‌فرض دست‌یافتنی نبود و
     // در نتیجه «هیچ طرح موجهی» پیدا نمی‌شد و کل منطق قیدها مرده بود.
-    for (const key of PRESETS.map((preset) => preset.key)) {
+    for (const key of ['sample-1', 'sample-3'] as const) {
       const res = optimizeDesign(presetInput(key), { objective: 'margin', constraints: DEFAULT_CONSTRAINTS, passes: 3 });
       assert.ok(res.anyFeasible, `${key}: the shipped defaults must admit at least one feasible design`);
       assert.ok(res.best.feasible, `${key}: a feasible design must always be the recommendation`);
       assert.deepEqual(res.best.violations, []);
     }
+    // نمونهٔ سوم (نگین رویش) با ضرایب ۲۵۰٪ تا ۶۰۰٪ یک طرح اهرمی است؛ در سقف ۴۵٪
+    // بهینه‌یاب باید کم‌نقض‌ترین طرح را برگرداند و با سقف متناسب، طرح موجه بیابد.
+    const rouyeshDefault = optimizeDesign(presetInput('sample-4'), {
+      objective: 'margin',
+      constraints: DEFAULT_CONSTRAINTS,
+      passes: 3,
+    });
+    assert.ok(rouyeshDefault.best.severity <= rouyeshDefault.baseline.severity + 1e-12);
+    const rouyeshRelaxed = optimizeDesign(presetInput('sample-4'), {
+      objective: 'margin',
+      constraints: { ...DEFAULT_CONSTRAINTS, maxHolePct: 160 },
+      passes: 3,
+    });
+    assert.ok(rouyeshRelaxed.anyFeasible);
+    assert.ok(rouyeshRelaxed.best.feasible);
   });
 
   it('finds a design that is never worse than the baseline for every objective', () => {

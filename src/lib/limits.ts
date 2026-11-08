@@ -8,9 +8,9 @@
 export const TIER_WAIT_MIN = 1;
 export const TIER_WAIT_MAX = 18;
 
-/** دامنهٔ ضریب برابری پله — سازنده، ورود JSON و بهینه‌یاب همگی همین را رعایت می‌کنند */
+/** دامنهٔ ضریب برابری پله — سازنده، ورود JSON و بهینه‌یاب همگی همین را رعایت می‌کنند (شامل نگین رویش تا ۶۰۰٪) */
 export const TIER_ALPHA_MIN = 2.5;
-export const TIER_ALPHA_MAX = 225;
+export const TIER_ALPHA_MAX = 600;
 
 /**
  * سقف نرخ عقد (کارمزد قرض‌الحسنه / سود مرابحه / نرخ اختصاصی پله) در ورود

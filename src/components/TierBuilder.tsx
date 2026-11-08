@@ -109,7 +109,7 @@ export function TierBuilder({ tiers, results, config, activePreset, onChange, on
       />
 
       {/* Presets */}
-      <div className="grid gap-3 p-5 pb-2 md:grid-cols-2">
+      <div className="grid gap-3 p-5 pb-2 md:grid-cols-3">
         {PRESETS.map((p) => {
           const active = activePreset === p.key;
           const displayedRate = active ? (p.contractType === 'qard' ? config.qardFeeRate : config.murabahaRate) : p.rate;

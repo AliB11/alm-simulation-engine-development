@@ -145,14 +145,16 @@ interface DesignRules {
 }
 
 function rulesFor(input?: SimInput): DesignRules {
-  if (input?.config.contractType === 'qard') {
+  if (!input || input.config.contractType === 'qard') {
     return { waitMin: 1, waitMax: 18, alphaMin: 2.5, alphaMax: 225, repaymentTerms: [12, 24, 36, 48, 60] };
   }
-  const tiers = input?.tiers ?? [];
+  const tiers = input.tiers ?? [];
   const terms = [...new Set(tiers.map((t) => Math.round(finite(t.tLoan, 0))).filter((v) => v >= 6 && v <= 60))].sort((a, b) => a - b);
+  const minWait = tiers.length ? Math.max(TIER_WAIT_MIN, Math.min(...tiers.map((t) => finite(t.tDep, TIER_WAIT_MIN)))) : TIER_WAIT_MIN;
+  const maxWait = tiers.length ? Math.min(TIER_WAIT_MAX, Math.max(...tiers.map((t) => finite(t.tDep, TIER_WAIT_MAX)))) : TIER_WAIT_MAX;
   return {
-    waitMin: tiers.length ? Math.max(TIER_WAIT_MIN, Math.min(...tiers.map((t) => finite(t.tDep, TIER_WAIT_MIN)))) : TIER_WAIT_MIN,
-    waitMax: tiers.length ? Math.min(TIER_WAIT_MAX, Math.max(...tiers.map((t) => finite(t.tDep, TIER_WAIT_MAX)))) : TIER_WAIT_MAX,
+    waitMin: minWait,
+    waitMax: maxWait > minWait ? maxWait : TIER_WAIT_MAX,
     alphaMin: tiers.length ? Math.max(TIER_ALPHA_MIN, Math.min(...tiers.map((t) => finite(t.alpha, TIER_ALPHA_MIN)))) : TIER_ALPHA_MIN,
     alphaMax: tiers.length ? Math.min(TIER_ALPHA_MAX, Math.max(...tiers.map((t) => finite(t.alpha, TIER_ALPHA_MAX)))) : TIER_ALPHA_MAX,
     repaymentTerms: terms.length ? terms : [12, 24, 36, 48, 60],

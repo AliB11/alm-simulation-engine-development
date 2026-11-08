@@ -56,6 +56,27 @@ const GOLDEN: Record<string, Record<string, number | null>> = {
     totalWriteOff: 0,
     netMargin: 4177913099,
   },
+  'sample-4': {
+    totalDeposit: 50000000000,
+    netDeposit: 45000000000,
+    totalCommitment: 72000000000,
+    maxHole: 68003787500,
+    minCumMonth: 9,
+    tippingPoint: 9,
+    recoveryMonth: 53,
+    deficitMonths: 44,
+    endCum: 10493328820,
+    leverage: 2.511111111111111,
+    interbankCost: 28748775448,
+    borrowers: 360,
+    peakOutflow: 113000245833,
+    totalProfitPaid: 7612500,
+    totalIncomeInHorizon: 14487356266,
+    netInterestIncome: 14479743766,
+    totalProvision: 0,
+    totalWriteOff: 0,
+    netMargin: -14269031682,
+  },
 };
 
 const MONEY_KEYS = [

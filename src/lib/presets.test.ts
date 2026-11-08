@@ -20,23 +20,25 @@ const makeTier = (id: string, name: string): Tier => ({
 
 const sampleOne = PRESETS.find((preset) => preset.key === 'sample-1');
 const secondSample = PRESETS.find((preset) => preset.key === 'sample-3');
+const thirdSample = PRESETS.find((preset) => preset.key === 'sample-4');
 assert.ok(sampleOne);
 assert.ok(secondSample);
+assert.ok(thirdSample);
 
 describe('sample plan one — Negin Omid Zarin, Bank Sepah', () => {
-  it('ships exactly two profiles, numbered ۱ و ۲, with the Negin profile as the default', () => {
+  it('ships three profiles, numbered ۱، ۲ و ۳, with the Negin Omid Zarin profile as the default', () => {
     assert.equal(DEFAULT_PRESET, 'sample-1');
-    /* کلید داخلی الگوی مرابحه همان `sample-3` مانده تا وضعیت ذخیره‌شدهٔ کاربران
-       بی‌صدا خراب نشود؛ برچسب نمایشی اما پیوسته و «نمونه طرح دوم» است. */
+    /* کلید داخلی الگوی دوم `sample-3` و الگوی سوم `sample-4` است تا کلید حذف‌شدهٔ
+       `sample-2` همچنان به `sample-1` مهاجرت داده شود و وضعیت ذخیره‌شدهٔ کاربران
+       بی‌صدا خراب نشود. */
     assert.deepEqual(
       PRESETS.map((preset) => preset.key),
-      ['sample-1', 'sample-3'],
+      ['sample-1', 'sample-3', 'sample-4'],
     );
     assert.deepEqual(
       PRESETS.map((preset) => preset.name),
-      ['نمونه طرح اول', 'نمونه طرح دوم'],
+      ['نمونه طرح اول', 'نمونه طرح دوم', 'نمونه طرح سوم'],
     );
-    assert.equal(PRESETS.some((preset) => preset.name.includes('نمونه طرح سوم')), false);
   });
 
   it('matches the publicly stated loan type, fee choices, headline ceiling and tenor options', () => {
@@ -165,6 +167,49 @@ describe('sample plan two', () => {
     assert.ok((kpis.recoveryMonth as number) <= 40, 'sample three must recover well inside the horizon');
     assert.ok(kpis.deficitMonths <= 30, 'too many months spent in deficit');
     assert.ok(kpis.endCum > 0, 'sample three must end the horizon with positive cumulative liquidity');
+  });
+});
+
+describe('sample plan three — Negin Rouyesh, Bank Sepah', () => {
+  it('matches the published Negin Rouyesh modes, ceiling, deposit rate and ranges', () => {
+    assert.equal(thirdSample.name, 'نمونه طرح سوم');
+    assert.equal(thirdSample.contractType, 'murabaha');
+    assert.equal(thirdSample.rate, 15);
+    assert.equal(thirdSample.loanCap, 200_000_000);
+    assert.equal(thirdSample.depositProfitRate, 0.01);
+    assert.deepEqual(thirdSample.waitingRange, [9, 18]);
+    assert.deepEqual(thirdSample.repaymentTerms, [12, 24, 36, 48, 60]);
+    assert.deepEqual(thirdSample.alphaRange, [250, 600]);
+    assert.deepEqual(thirdSample.tierRateRange, [4, 15]);
+    assert.equal(thirdSample.tiers.length, 3);
+    assert.deepEqual(
+      thirdSample.tiers.map((tier) => ({
+        tDep: tier.tDep,
+        tLoan: tier.tLoan,
+        alpha: tier.alpha,
+        minBalance: tier.minBalance,
+        rateOverride: tier.rateOverride,
+      })),
+      [
+        { tDep: 9, tLoan: 48, alpha: 250, minBalance: 50_000, rateOverride: 4 },
+        { tDep: 9, tLoan: 60, alpha: 300, minBalance: 50_000, rateOverride: 7 },
+        { tDep: 9, tLoan: 60, alpha: 600, minBalance: 50_000, rateOverride: 15 },
+      ],
+    );
+    assert.ok(Math.abs(thirdSample.tiers.reduce((sum, tier) => sum + tier.allocation, 0) - 100) < 1e-9);
+  });
+
+  it('keeps all tier values editable and inside the shared import/UI limits', () => {
+    for (const tier of thirdSample.tiers) {
+      assert.ok(tier.tDep >= TIER_WAIT_MIN && tier.tDep <= TIER_WAIT_MAX, `${tier.name}: waiting period out of range`);
+      assert.ok(tier.tLoan >= 6 && tier.tLoan <= 60, `${tier.name}: repayment term out of range`);
+      assert.ok(tier.alpha >= 0 && tier.alpha <= TIER_ALPHA_MAX, `${tier.name}: alpha out of range`);
+      assert.ok(
+        (tier.rateOverride as number) > thirdSample.depositProfitRate && (tier.rateOverride as number) <= IMPORT_RATE_MAX,
+        `${tier.name}: rate out of range`,
+      );
+      assert.ok(tier.allocation >= 0 && tier.allocation <= 100, `${tier.name}: allocation out of range`);
+    }
   });
 });
 
